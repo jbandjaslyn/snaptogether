@@ -1,29 +1,27 @@
-"use client"
+"use client";
 
-import { useRef, useState, useEffect } from "react"
-import { Camera, Download, RefreshCw, Upload } from "lucide-react"
+import { useRef, useState, useEffect } from "react";
+import { Camera, Download, RefreshCw, Upload } from "lucide-react";
 
-import { Button } from "@/components/button"
-import { Card, CardContent } from "@/components/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/tabs"
-import { FilterSelector } from "@/components/filter-selector"
-import { useMobile } from "@/hooks/use-mobile"
-import { Progress } from "@/components/progress"
+import { Button } from "@/components/button";
+import { Card, CardContent } from "@/components/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/tabs";
+import { FilterSelector } from "@/components/filter-selector";
+import { Progress } from "@/components/progress";
+import { useMobile } from "@/hooks/use-mobile";
 
 export function PhotoBooth() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stripCanvasRef = useRef<HTMLCanvasElement>(null)
-  const [stream, setStream] = useState<MediaStream | null>(null)
   const [capturedImages, setCapturedImages] = useState<string[]>([])
   const [stripImage, setStripImage] = useState<string | null>(null)
   const [currentFilter, setCurrentFilter] = useState<string>("normal")
   const [cameraPermission, setCameraPermission] = useState<boolean | null>(null)
   const [isCapturing, setIsCapturing] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
-  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
-  const isMobile = useMobile()
+  const [activeTab, setActiveTab] = useState("camera"); 
 
   useEffect(() => {
     const startCamera = async () => {
@@ -34,244 +32,240 @@ export function PhotoBooth() {
             height: { ideal: 720 },
             facingMode: "user",
           },
-        }
-
-        const mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
-        setStream(mediaStream)
-
+        };
+        const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
         if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream
+          videoRef.current.srcObject = mediaStream;
+          videoRef.current.onloadedmetadata = () => videoRef.current.play();
         }
-
-        setCameraPermission(true)
+        setCameraPermission(true);
       } catch (err) {
-        console.error("Error accessing camera:", err)
-        setCameraPermission(false)
+        console.error("Error accessing camera:", err);
+        setCameraPermission(false);
       }
-    }
-
-    startCamera()
-
+    };
+  
+    startCamera();
+  
+    // Cleanup directly using the video element's srcObject.
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop())
+      if (videoRef.current && videoRef.current.srcObject) {
+        const tracks = videoRef.current.srcObject.getTracks();
+        tracks.forEach((track) => track.stop());
       }
-    }
-  }, [])
+    };
+  }, []);
+  
 
+  // Run a countdown and return a promise that resolves when done.
+  const runCountdown = (seconds) => {
+    return new Promise((resolve) => {
+      setCountdown(seconds);
+      const interval = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            resolve();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    });
+  };
+
+  // Capture the current video frame into the canvas and return a data URL.
   const capturePhoto = () => {
     if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current
-      const canvas = canvasRef.current
-      const context = canvas.getContext("2d")
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext("2d");
 
-      if (context) {
-        // Set canvas dimensions to match video
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
+      if (!video.videoWidth || !video.videoHeight) {
+        console.error("Video dimensions not available yet.");
+        return null;
+      }
 
-        // Draw the video frame to the canvas
-        context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      // Set canvas size to match the video.
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
 
-        // Apply filter effects
-        applyFilter(context, currentFilter, canvas.width, canvas.height)
+      // Draw the current frame from the video.
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Convert canvas to data URL
-        const imageDataURL = canvas.toDataURL("image/png")
-        return imageDataURL
+      // Apply the current filter.
+      applyFilter(context, currentFilter, canvas.width, canvas.height);
+
+      // Return the image as a data URL.
+      return canvas.toDataURL("image/png");
+    }
+    return null;
+  };
+
+  // Sequentially capture 4 photos.
+  const runPhotoSequence = async () => {
+    setIsCapturing(true);
+    setStripImage(null);
+    
+    // Use a local array to track photos
+    const photos = [];
+    
+    for (let i = 0; i < 4; i++) {
+      await runCountdown(3);
+      // Optional short delay to let the countdown display clear.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const photo = capturePhoto();
+      if (photo) {
+        console.log(`Photo ${i+1} captured`);
+        photos.push(photo);
       }
     }
-    return null
-  }
+    
+    // Set all photos at once when complete
+    console.log(`Setting ${photos.length} photos to state`);
+    setCapturedImages(photos);
+    // After short delay to let state update, create strip
+    setTimeout(() => {
+      createPhotoStrip(photos);
+      setIsCapturing(false);
+    }, 100);
+  };
 
-  const startPhotoboothSequence = () => {
-    setIsCapturing(true)
-    setCapturedImages([])
-    setStripImage(null)
-    setCurrentPhotoIndex(0)
-    startCountdown(3)
-  }
+  // Create a photo strip by stacking the 4 images.
+  const createPhotoStrip = (photos = capturedImages) => {
+    setCapturedImages(photos);
+    console.log(capturedImages.length);
+    console.log(stripCanvasRef.current);
+    if (photos.length < 4 || !stripCanvasRef.current) {
+      console.log("lmao" + photos.length);
+      console.log("rofl" + stripCanvasRef.current);
+      console.error("Not enough photos to create a strip");
+      return;
+    }
 
-  const startCountdown = (seconds: number) => {
-    setCountdown(seconds)
+    const canvas = stripCanvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-    const countdownInterval = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev === null || prev <= 1) {
-          clearInterval(countdownInterval)
-          // Take photo when countdown reaches 0
-          if (currentPhotoIndex < 4) {
-            const photo = capturePhoto()
-            if (photo) {
-              setCapturedImages((prev) => [...prev, photo])
-              setCurrentPhotoIndex(currentPhotoIndex + 1)
+    // Define dimensions.
+    const photoWidth = 400;
+    const photoHeight = 300;
+    const padding = 10;
 
-              // If we haven't taken all 4 photos yet, start the next countdown
-              if (currentPhotoIndex < 3) {
-                setTimeout(() => startCountdown(3), 500)
-              } else {
-                // We've taken all 4 photos, create the strip
-                setTimeout(() => createPhotoStrip(), 500)
-              }
-            }
-          }
-          return null
-        }
-        return prev - 1
-      })
-    }, 1000)
-  }
+    // Set canvas size for a vertical strip.
+    canvas.width = photoWidth + padding * 2;
+    canvas.height = (photoHeight + padding) * 4 + padding;
 
-  const createPhotoStrip = () => {
-    if (capturedImages.length !== 4 || !stripCanvasRef.current) return
+    // Fill background with white.
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const canvas = stripCanvasRef.current
-    const ctx = canvas.getContext("2d")
-
-    if (!ctx) return
-
-    // Set dimensions for the strip (vertical layout)
-    const photoWidth = 400
-    const photoHeight = 300
-    const padding = 10
-
-    canvas.width = photoWidth + padding * 2
-    canvas.height = photoHeight * 4 + padding * 5
-
-    // Fill with white background
-    ctx.fillStyle = "white"
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-    // Load and draw each image
-    const loadImages = async () => {
+    // Load each image and draw it on the canvas.
+    const loadAndDrawImages = async () => {
       for (let i = 0; i < 4; i++) {
-        const img = new Image()
-        img.crossOrigin = "anonymous"
-
-        // Create a promise to wait for the image to load
-        await new Promise<void>((resolve) => {
+        await new Promise((resolve) => {
+          const img = new Image();
           img.onload = () => {
-            // Calculate position for this photo
-            const y = padding + i * (photoHeight + padding)
-
-            // Draw the photo
-            ctx.drawImage(img, padding, y, photoWidth, photoHeight)
-            resolve()
-          }
-          img.src = capturedImages[i]
-        })
+            const y = padding + i * (photoHeight + padding);
+            ctx.drawImage(img, padding, y, photoWidth, photoHeight);
+            resolve();
+          };
+          img.src = photos[i];
+        });
       }
+      // Optional: Add title or branding.
+      ctx.fillStyle = "black";
+      ctx.font = "bold 20px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("SnapBooth", canvas.width / 2, 30);
 
-      // Add a title/branding to the strip
-      ctx.fillStyle = "black"
-      ctx.font = "bold 20px sans-serif"
-      ctx.textAlign = "center"
-      ctx.fillText("SnapBooth", canvas.width / 2, padding / 2 + 10)
+      // Convert the completed strip to a data URL.
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+      setStripImage(dataUrl);
 
-      // Convert the strip to an image
-      const stripImageURL = canvas.toDataURL("image/jpeg", 0.9)
-      setStripImage(stripImageURL)
-      setIsCapturing(false)
-    }
+      setActiveTab("strip");
+    };
 
-    loadImages()
-  }
+    loadAndDrawImages();
+  };
 
-  const applyFilter = (context: CanvasRenderingContext2D, filter: string, width: number, height: number) => {
-    const imageData = context.getImageData(0, 0, width, height)
-    const data = imageData.data
+  // Filter function that modifies the image data.
+  const applyFilter = (context, filter, width, height) => {
+    const imageData = context.getImageData(0, 0, width, height);
+    const data = imageData.data;
 
     switch (filter) {
       case "grayscale":
         for (let i = 0; i < data.length; i += 4) {
-          const avg = (data[i] + data[i + 1] + data[i + 2]) / 3
-          data[i] = avg
-          data[i + 1] = avg
-          data[i + 2] = avg
+          const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          data[i] = avg;
+          data[i + 1] = avg;
+          data[i + 2] = avg;
         }
-        break
+        break;
       case "sepia":
         for (let i = 0; i < data.length; i += 4) {
-          const r = data[i]
-          const g = data[i + 1]
-          const b = data[i + 2]
-
-          data[i] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189)
-          data[i + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168)
-          data[i + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131)
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          data[i] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189);
+          data[i + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168);
+          data[i + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131);
         }
-        break
+        break;
       case "invert":
         for (let i = 0; i < data.length; i += 4) {
-          data[i] = 255 - data[i]
-          data[i + 1] = 255 - data[i + 1]
-          data[i + 2] = 255 - data[i + 2]
+          data[i] = 255 - data[i];
+          data[i + 1] = 255 - data[i + 1];
+          data[i + 2] = 255 - data[i + 2];
         }
-        break
+        break;
       case "normal":
       default:
-        // No filter
-        break
+        // No changes.
+        break;
     }
 
-    context.putImageData(imageData, 0, 0)
-  }
+    context.putImageData(imageData, 0, 0);
+  };
 
+  // Reset the photobooth state.
   const resetCamera = () => {
-    setCapturedImages([])
-    setStripImage(null)
-    setIsCapturing(false)
-    setCountdown(null)
-    setCurrentPhotoIndex(0)
-    setUploadStatus(null)
-  }
+    setCapturedImages([]);
+    setStripImage(null);
+    setIsCapturing(false);
+    setCountdown(0);
+    setUploadStatus(null);
+  };
 
+  // Download the photo strip.
   const downloadStrip = () => {
     if (stripImage) {
-      const link = document.createElement("a")
-      link.href = stripImage
-      link.download = `snapbooth-strip-${new Date().getTime()}.jpg`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+      const link = document.createElement("a");
+      link.href = stripImage;
+      link.download = `snapbooth-strip-${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
-  }
+  };
 
+  // Simulated upload function.
   const uploadStrip = async () => {
-    if (!stripImage) return
-
-    setUploadStatus("Uploading...")
-
-    // This is a mock upload function
-    // In a real application, you would send the image to your server or a storage service
+    if (!stripImage) return;
+    setUploadStatus("Uploading...");
     try {
-      // Simulate upload delay
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-
-      // Mock successful upload
-      setUploadStatus("Upload successful! Your strip has been saved.")
-
-      // In a real app, you would do something like:
-      // const formData = new FormData()
-      // formData.append('image', await fetch(stripImage).then(r => r.blob()), 'photostrip.jpg')
-      // const response = await fetch('/api/upload', {
-      //   method: 'POST',
-      //   body: formData
-      // })
-      // if (response.ok) {
-      //   setUploadStatus("Upload successful!")
-      // } else {
-      //   throw new Error('Upload failed')
-      // }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      setUploadStatus("Upload successful! Your strip has been saved.");
     } catch (error) {
-      console.error("Error uploading image:", error)
-      setUploadStatus("Upload failed. Please try again.")
+      console.error("Error uploading image:", error);
+      setUploadStatus("Upload failed. Please try again.");
     }
-  }
+  };
 
-  const handleFilterChange = (filter: string) => {
-    setCurrentFilter(filter)
-  }
+  const handleFilterChange = (filter) => {
+    setCurrentFilter(filter);
+  };
 
   if (cameraPermission === false) {
     return (
@@ -287,58 +281,58 @@ export function PhotoBooth() {
           <Button onClick={() => window.location.reload()}>Try Again</Button>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Tabs defaultValue="camera" className="w-full">
+
+      <canvas 
+        ref={stripCanvasRef} 
+        style={{ display: 'none' }} 
+        width="400" 
+        height="1200"
+      />
+      <Tabs value={activeTab} onValueChange={setActiveTab} defaultValue="camera" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="camera">Camera</TabsTrigger>
-          <TabsTrigger value="strip" disabled={!stripImage}>
-            Photo Strip
-          </TabsTrigger>
+          <TabsTrigger value="strip" disabled={!stripImage}>Photo Strip</TabsTrigger>
         </TabsList>
         <TabsContent value="camera" className="mt-4">
           <Card>
             <CardContent className="p-6">
               <div className="relative overflow-hidden rounded-lg bg-black aspect-video">
-                {isCapturing && countdown !== null && (
+                {isCapturing && countdown > 0 && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10">
                     <div className="text-white text-7xl font-bold">{countdown}</div>
                   </div>
                 )}
-
                 <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
-
                 <canvas ref={canvasRef} className="hidden" />
-
-                {isCapturing && countdown === null && (
+                {isCapturing && countdown === 0 && (
                   <div className="absolute bottom-0 left-0 right-0 p-4">
-                    <Progress value={(currentPhotoIndex / 4) * 100} className="h-2" />
-                    <p className="text-white text-center mt-2">Taking photo {currentPhotoIndex + 1} of 4</p>
+                    <Progress value={(capturedImages.length / 4) * 100} className="h-2" />
+                    <p className="text-white text-center mt-2">
+                      Taking photo {capturedImages.length + 1} of 4
+                    </p>
                   </div>
                 )}
               </div>
-
               <div className="mt-4">
                 <FilterSelector currentFilter={currentFilter} onFilterChange={handleFilterChange} />
               </div>
-
               <div className="mt-6 flex justify-center gap-4">
                 {!isCapturing && capturedImages.length === 0 && (
-                  <Button onClick={startPhotoboothSequence} className="gap-2" disabled={isCapturing}>
+                  <Button onClick={runPhotoSequence} className="gap-2">
                     <Camera className="h-4 w-4" />
                     Start Photobooth (4 Photos)
                   </Button>
                 )}
-
                 {(isCapturing || capturedImages.length > 0) && !stripImage && (
                   <div className="text-center w-full">
                     {isCapturing ? <p>Taking photos... Please stay still</p> : <p>Creating your photo strip...</p>}
                   </div>
                 )}
-
                 {stripImage && (
                   <Button variant="outline" onClick={resetCamera} className="gap-2">
                     <RefreshCw className="h-4 w-4" />
@@ -350,32 +344,27 @@ export function PhotoBooth() {
           </Card>
         </TabsContent>
         <TabsContent value="strip" className="mt-4">
+
           {stripImage && (
             <Card>
               <CardContent className="p-6">
                 <div className="overflow-hidden rounded-lg mx-auto max-w-md">
-                  <img
-                    src={stripImage || "/placeholder.svg"}
-                    alt="Photo Strip"
-                    className="h-full w-full object-contain"
-                  />
+                  <img src={stripImage} alt="Photo Strip" className="h-full w-full object-contain" />
                   <canvas ref={stripCanvasRef} className="hidden" />
                 </div>
-
                 {uploadStatus && (
                   <div
                     className={`mt-4 p-3 rounded-md text-center ${
                       uploadStatus.includes("successful")
                         ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
                         : uploadStatus.includes("failed")
-                          ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                          : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                        ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                        : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
                     }`}
                   >
                     {uploadStatus}
                   </div>
                 )}
-
                 <div className="mt-6 flex justify-center gap-4">
                   <Button variant="outline" onClick={resetCamera} className="gap-2">
                     <RefreshCw className="h-4 w-4" />
@@ -388,7 +377,10 @@ export function PhotoBooth() {
                   <Button
                     onClick={uploadStrip}
                     className="gap-2"
-                    disabled={uploadStatus?.includes("successful") || uploadStatus?.includes("Uploading")}
+                    disabled={
+                      uploadStatus?.includes("successful") ||
+                      uploadStatus?.includes("Uploading")
+                    }
                   >
                     <Upload className="h-4 w-4" />
                     Upload
@@ -400,6 +392,5 @@ export function PhotoBooth() {
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }
-
