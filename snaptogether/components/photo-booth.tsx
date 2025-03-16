@@ -107,24 +107,44 @@ export function PhotoBooth() {
     setIsCapturing(true);
     setStripImage(null);
     
-    // Use a local array to track photos
+    // Check if video is active before starting
+    if (!videoRef.current || !videoRef.current.srcObject) {
+      console.error("Video stream not available");
+      setIsCapturing(false);
+      return;
+    }
+    
+    // Ensure video is playing
+    try {
+      await videoRef.current.play();
+    } catch (err) {
+      console.error("Failed to play video:", err);
+    }
+    
     const photos = [];
     
     for (let i = 0; i < 4; i++) {
       await runCountdown(3);
-      // Optional short delay to let the countdown display clear.
+      // Give video time to refresh between shots
       await new Promise((resolve) => setTimeout(resolve, 100));
+      
+      // Double check video is still available
+      if (!videoRef.current || videoRef.current.paused) {
+        console.log("Video is paused, attempting to resume");
+        try {
+          await videoRef.current?.play();
+        } catch (err) {
+          console.error("Failed to resume video");
+        }
+      }
+      
       const photo = capturePhoto();
       if (photo) {
-        console.log(`Photo ${i+1} captured`);
         photos.push(photo);
       }
     }
     
-    // Set all photos at once when complete
-    console.log(`Setting ${photos.length} photos to state`);
     setCapturedImages(photos);
-    // After short delay to let state update, create strip
     setTimeout(() => {
       createPhotoStrip(photos);
       setIsCapturing(false);
@@ -303,7 +323,7 @@ export function PhotoBooth() {
             <CardContent className="p-6">
               <div className="relative overflow-hidden rounded-lg bg-black aspect-video">
                 {isCapturing && countdown > 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10">
+                  <div className="absolute inset-0 flex items-center justify-center z-10" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
                     <div className="text-white text-7xl font-bold">{countdown}</div>
                   </div>
                 )}
