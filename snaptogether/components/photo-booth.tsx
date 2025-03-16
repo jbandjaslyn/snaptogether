@@ -16,12 +16,38 @@ export function PhotoBooth() {
   const stripCanvasRef = useRef<HTMLCanvasElement>(null)
   const [capturedImages, setCapturedImages] = useState<string[]>([])
   const [stripImage, setStripImage] = useState<string | null>(null)
-  const [currentFilter, setCurrentFilter] = useState<string>("normal")
+  const [currentFilter, setCurrentFilter] = useState<string>("none")
   const [cameraPermission, setCameraPermission] = useState<boolean | null>(null)
   const [isCapturing, setIsCapturing] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("camera"); 
+
+
+  useEffect(() => {
+    // Ensure video is ready and canvas is available
+    const updateCanvas = () => {
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      if (canvas && video) {
+        const context = canvas.getContext('2d');
+        if (context) {
+          // Set canvas dimensions to match video
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          // Draw the video frame
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          // Apply the filter
+          applyFilter(context, currentFilter, canvas.width, canvas.height);
+        }
+      }
+    };
+  
+    const intervalId = setInterval(updateCanvas, 100); // Update 10 times per second
+  
+    return () => clearInterval(intervalId);
+  }, [currentFilter]);
+  
 
   useEffect(() => {
     const startCamera = async () => {
@@ -210,42 +236,65 @@ export function PhotoBooth() {
   };
 
   // Filter function that modifies the image data.
-  const applyFilter = (context, filter, width, height) => {
+  const applyFilter = (context: CanvasRenderingContext2D, filter: string, width: number, height: number) => {
+    // Skip if no filter selected
+    if (filter === "none") return;
+    
+    // Get the image data to manipulate
     const imageData = context.getImageData(0, 0, width, height);
     const data = imageData.data;
-
+    
     switch (filter) {
       case "grayscale":
         for (let i = 0; i < data.length; i += 4) {
           const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-          data[i] = avg;
-          data[i + 1] = avg;
-          data[i + 2] = avg;
+          data[i] = avg;     // red
+          data[i + 1] = avg; // green
+          data[i + 2] = avg; // blue
         }
         break;
+        
       case "sepia":
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
-          data[i] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189);
-          data[i + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168);
-          data[i + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131);
+          data[i] = Math.min(255, (r * 0.393) + (g * 0.769) + (b * 0.189));
+          data[i + 1] = Math.min(255, (r * 0.349) + (g * 0.686) + (b * 0.168));
+          data[i + 2] = Math.min(255, (r * 0.272) + (g * 0.534) + (b * 0.131));
         }
         break;
+        
       case "invert":
         for (let i = 0; i < data.length; i += 4) {
-          data[i] = 255 - data[i];
-          data[i + 1] = 255 - data[i + 1];
-          data[i + 2] = 255 - data[i + 2];
+          data[i] = 255 - data[i];         // red
+          data[i + 1] = 255 - data[i + 1]; // green
+          data[i + 2] = 255 - data[i + 2]; // blue
         }
         break;
-      case "normal":
-      default:
-        // No changes.
+        
+      case "vintage":
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          data[i] = Math.min(255, (r * 0.9) + 40);
+          data[i + 1] = Math.min(255, (g * 0.7) + 20);
+          data[i + 2] = Math.min(255, (b * 0.6) + 10);
+        }
+        break;
+        
+      case "blueprint":
+        for (let i = 0; i < data.length; i += 4) {
+          const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          data[i] = 0;                // No red (zero)
+          data[i + 1] = avg * 0.4;    // Low green
+          data[i + 2] = Math.min(255, avg * 1.2); // High blue
+        }
         break;
     }
-
+    
+    // Put the modified data back
     context.putImageData(imageData, 0, 0);
   };
 
@@ -313,6 +362,7 @@ export function PhotoBooth() {
         width="400" 
         height="1200"
       />
+
       <Tabs value={activeTab} onValueChange={setActiveTab} defaultValue="camera" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="camera">Camera</TabsTrigger>
@@ -327,8 +377,18 @@ export function PhotoBooth() {
                     <div className="text-white text-7xl font-bold">{countdown}</div>
                   </div>
                 )}
-                <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
-                <canvas ref={canvasRef} className="hidden" />
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="h-full w-full object-cover"
+                  style={{ display: 'none' }}
+                />
+                <canvas
+                  ref={canvasRef}
+                  className="absolute top-0 left-0 w-full h-full"
+                />
                 {isCapturing && countdown === 0 && (
                   <div className="absolute bottom-0 left-0 right-0 p-4">
                     <Progress value={(capturedImages.length / 4) * 100} className="h-2" />

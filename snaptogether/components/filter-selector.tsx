@@ -9,11 +9,13 @@ interface FilterSelectorProps {
 }
 
 const filters = [
-  { id: "normal", name: "Normal" },
+  { id: "none", name: "No Filter" },
   { id: "grayscale", name: "Grayscale" },
   { id: "sepia", name: "Sepia" },
   { id: "invert", name: "Invert" },
-]
+  { id: "vintage", name: "Vintage" },
+  { id: "blueprint", name: "Blueprint" }
+];
 
 export function FilterSelector({ currentFilter, onFilterChange }: FilterSelectorProps) {
   return (
