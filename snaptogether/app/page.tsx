@@ -28,7 +28,7 @@ export default function Home() {
           <div className="space-y-2 text-center">
             <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">Virtual Photo Booth</h1>
             <p className="mx-auto text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400 max-w-[700px]">
-              Take fun photos, apply filters, and share with your friends!
+              Take fun photos, apply filters, add custom frames, and share with your friends!
             </p>
           </div>
           <PhotoBooth />
