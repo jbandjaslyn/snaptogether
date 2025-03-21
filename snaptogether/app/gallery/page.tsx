@@ -1,10 +1,27 @@
+"use client"
+
 import Link from "next/link"
-import { Camera, ChevronLeft } from "lucide-react"
+import { Camera, ChevronLeft, Trash2 } from "lucide-react"
+import { useEffect, useState } from "react"
 
 import { Button } from "@/components/button"
 import { Card, CardContent } from "@/components/card"
+import { getPhotos, deletePhoto, type SavedPhoto } from "@/lib/storage"
 
 export default function GalleryPage() {
+  const [photos, setPhotos] = useState<SavedPhoto[]>([])
+
+  useEffect(() => {
+    setPhotos(getPhotos())
+  }, [])
+
+  const handleDelete = (id: string) => {
+    if (confirm("Are you sure you want to delete this photo?")) {
+      deletePhoto(id)
+      setPhotos(getPhotos())
+    }
+  }
+
   return (
     <div className="flex flex-col min-h-screen">
       <header className="border-b">
@@ -33,7 +50,31 @@ export default function GalleryPage() {
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            <GalleryEmptyState />
+            {photos.length === 0 ? (
+              <GalleryEmptyState />
+            ) : (
+              photos.map((photo) => (
+                <Card key={photo.id} className="relative group">
+                  <CardContent className="p-0">
+                    <div className="relative aspect-[4/3]">
+                      <img
+                        src={photo.imageUrl}
+                        alt={`Photo strip from ${new Date(photo.timestamp).toLocaleString()}`}
+                        className="w-full h-full object-contain"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleDelete(photo.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </div>
       </main>

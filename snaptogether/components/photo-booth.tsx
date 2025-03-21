@@ -14,6 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui"
 
 // Import frame SVGs directly
 import { TEMPLATE_FRAMES } from "@/components/frame-templates"
+import { savePhoto } from "@/lib/storage"
 
 export function PhotoBooth() {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -294,139 +295,202 @@ export function PhotoBooth() {
     setIsCapturing(true)
     setStripImage(null)
     setCameraError(null)
+    setCapturedImages([]) // Reset captured images
 
-    const photos = []
+    const photos: string[] = []
 
-    for (let i = 0; i < 4; i++) {
-      await runCountdown(3)
+    try {
+      for (let i = 0; i < 4; i++) {
+        await runCountdown(3)
 
-      // Ensure video is still playing
-      if (videoRef.current?.paused) {
-        try {
-          await videoRef.current.play()
-        } catch (err) {
-          console.error("Failed to resume video:", err)
-          setDebugInfo(`Failed to resume video: ${err.message}`)
+        // Ensure video is still playing
+        if (videoRef.current?.paused) {
+          try {
+            await videoRef.current.play()
+          } catch (err) {
+            console.error("Failed to resume video:", err)
+            setDebugInfo(`Failed to resume video: ${err instanceof Error ? err.message : 'Unknown error'}`)
+          }
         }
-      }
 
-      // Capture photo with retry
-      let photo = null
-      for (let attempt = 0; attempt < 3 && !photo; attempt++) {
-        photo = capturePhoto()
+        // Capture photo with retry
+        let photo: string | null = null
+        for (let attempt = 0; attempt < 3 && !photo; attempt++) {
+          photo = capturePhoto()
+          if (!photo) {
+            // Small delay before retry
+            await new Promise(r => setTimeout(r, 100))
+          }
+        }
+
         if (!photo) {
-          // Small delay before retry
-          await new Promise((r) => setTimeout(r, 100))
+          throw new Error("Failed to capture photo after multiple attempts")
         }
-      }
 
-      if (photo) {
         photos.push(photo)
-      } else {
-        setCameraError("Failed to capture photo. Please try again.")
-        break
+        setCapturedImages([...photos]) // Update UI with each photo
+        
+        // Small delay to ensure UI updates
+        await new Promise(r => setTimeout(r, 100))
       }
-    }
 
-    if (photos.length === 0) {
-      setCameraError("Failed to capture any photos. Please try again.")
+      // Only create strip if we have all 4 photos
+      if (photos.length === 4) {
+        await createPhotoStrip(photos)
+      } else {
+        throw new Error(`Expected 4 photos but got ${photos.length}`)
+      }
+    } catch (error) {
+      console.error("Photo sequence error:", error)
+      setCameraError(error instanceof Error ? error.message : "Failed to complete photo sequence")
+    } finally {
       setIsCapturing(false)
-      return
     }
-
-    // If we got at least one photo but not all 4, duplicate the last one to fill
-    while (photos.length < 4) {
-      photos.push(photos[photos.length - 1])
-    }
-
-    setCapturedImages(photos)
-    setTimeout(() => {
-      createPhotoStrip(photos)
-      setIsCapturing(false)
-    }, 100)
   }
 
   // Create a photo strip by stacking the 4 images.
-  const createPhotoStrip = (photos = capturedImages) => {
-    if (photos.length < 4 || !stripCanvasRef.current) {
-      console.error("Not enough photos to create a strip")
-      setDebugInfo("Strip error: Not enough photos to create a strip")
-      return
-    }
+  const createPhotoStrip = async (photos: string[]) => {
+    try {
+      if (!photos || photos.length < 4) {
+        throw new Error("Not enough photos to create a strip")
+      }
 
-    const canvas = stripCanvasRef.current
-    const ctx = canvas.getContext("2d")
-    if (!ctx) {
-      setDebugInfo("Strip error: Could not get canvas context")
-      return
-    }
+      // Initialize strip canvas with proper dimensions
+      const stripCanvas = stripCanvasRef.current
+      if (!stripCanvas) {
+        throw new Error("Strip canvas not found")
+      }
 
-    // Define dimensions.
-    const photoWidth = 400
-    const photoHeight = 300
-    const padding = 10
+      // Define dimensions with film strip aesthetics
+      const photoWidth = 800 // Make photos larger
+      const photoHeight = 600
+      const padding = 40 // Larger padding
+      const borderWidth = 60 // Width of the black film strip border
+      const bottomBrandingHeight = 120 // Height for the branding section
 
-    // Set canvas size for a vertical strip.
-    canvas.width = photoWidth + padding * 2
-    canvas.height = (photoHeight + padding) * 4 + padding
+      // Set canvas size for a vertical strip with borders
+      stripCanvas.width = photoWidth + (padding * 2) + (borderWidth * 2)
+      stripCanvas.height = (photoHeight * 4) + (padding * 5) + bottomBrandingHeight
 
-    // Fill background with white.
-    ctx.fillStyle = "white"
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+      const ctx = stripCanvas.getContext("2d")
+      if (!ctx) {
+        throw new Error("Could not get canvas context")
+      }
 
-    // Load each image and draw it on the canvas.
-    const loadAndDrawImages = async () => {
+      // Clear any previous content
+      ctx.clearRect(0, 0, stripCanvas.width, stripCanvas.height)
+
+      // Fill background with black for film strip effect
+      ctx.fillStyle = "black"
+      ctx.fillRect(0, 0, stripCanvas.width, stripCanvas.height)
+
+      // Draw the film strip holes
+      const holeRadius = 20
+      const holeOffset = 30
+      const holes = 9 // Number of holes on each side
+      const holeSpacing = (stripCanvas.height - bottomBrandingHeight) / (holes - 1)
+      
+      ctx.fillStyle = "#333333" // Darker gray for hole shadows
+      for (let side = 0; side < 2; side++) {
+        const x = side === 0 ? borderWidth/2 : stripCanvas.width - borderWidth/2
+        for (let i = 0; i < holes; i++) {
+          const y = holeOffset + (i * holeSpacing)
+          ctx.beginPath()
+          ctx.arc(x, y, holeRadius + 2, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+      
+      ctx.fillStyle = "#444444" // Lighter gray for holes
+      for (let side = 0; side < 2; side++) {
+        const x = side === 0 ? borderWidth/2 : stripCanvas.width - borderWidth/2
+        for (let i = 0; i < holes; i++) {
+          const y = holeOffset + (i * holeSpacing)
+          ctx.beginPath()
+          ctx.arc(x, y, holeRadius, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+
+      // Load and draw each image
       for (let i = 0; i < 4; i++) {
-        await new Promise((resolve) => {
+        await new Promise<void>((resolve) => {
           const img = new Image()
           img.crossOrigin = "anonymous"
-          img.onload = () => {
-            const y = padding + i * (photoHeight + padding)
-            ctx.drawImage(img, padding, y, photoWidth, photoHeight)
+          img.onload = async () => {
+            const y = padding + (i * (photoHeight + padding))
+            
+            // Create white background for each photo
+            ctx.fillStyle = "white"
+            ctx.fillRect(borderWidth + padding, y, photoWidth, photoHeight)
+            
+            // Calculate dimensions to maintain aspect ratio
+            const imgAspectRatio = img.width / img.height
+            const targetAspectRatio = photoWidth / photoHeight
+            
+            let drawWidth = photoWidth
+            let drawHeight = photoHeight
+            let offsetX = 0
+            let offsetY = 0
+            
+            if (imgAspectRatio > targetAspectRatio) {
+              // Image is wider than target
+              drawHeight = photoWidth / imgAspectRatio
+              offsetY = (photoHeight - drawHeight) / 2
+            } else {
+              // Image is taller than target
+              drawWidth = photoHeight * imgAspectRatio
+              offsetX = (photoWidth - drawWidth) / 2
+            }
+            
+            // Draw the image maintaining aspect ratio
+            ctx.drawImage(
+              img, 
+              borderWidth + padding + offsetX, 
+              y + offsetY, 
+              drawWidth, 
+              drawHeight
+            )
 
             // If a frame is selected, apply it
             if (currentFrame) {
-              // Find the frame in template frames or use as URL
-              const frameTemplate = TEMPLATE_FRAMES.find((f) => f.url === currentFrame)
-
-              if (frameTemplate && frameTemplate.svgContent) {
-                // If it's a template frame with SVG content
-                const svgBlob = new Blob([frameTemplate.svgContent], { type: "image/svg+xml" })
-                const url = URL.createObjectURL(svgBlob)
-
-                const frameImg = new Image()
+              const frameImg = new Image()
+              
+              // For data URLs, we don't need crossOrigin
+              if (!currentFrame.startsWith('data:')) {
                 frameImg.crossOrigin = "anonymous"
+              }
+              
+              await new Promise<void>((resolve) => {
                 frameImg.onload = () => {
-                  ctx.drawImage(frameImg, padding, y, photoWidth, photoHeight)
-                  URL.revokeObjectURL(url)
-                  resolve()
+                  try {
+                    ctx.drawImage(
+                      frameImg,
+                      borderWidth + padding,
+                      y,
+                      photoWidth,
+                      photoHeight
+                    )
+                    resolve()
+                  } catch (error) {
+                    console.error("Error drawing frame:", error)
+                    setDebugInfo(`Error drawing frame: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                    resolve()
+                  }
                 }
-                frameImg.onerror = (e) => {
-                  console.error("Error loading SVG frame", e)
-                  setDebugInfo(`Error loading SVG frame: ${e}`)
-                  URL.revokeObjectURL(url)
-                  resolve()
-                }
-                frameImg.src = url
-              } else {
-                // It's a custom uploaded frame or URL
-                const frameImg = new Image()
-                frameImg.crossOrigin = "anonymous"
-                frameImg.onload = () => {
-                  ctx.drawImage(frameImg, padding, y, photoWidth, photoHeight)
-                  resolve()
-                }
-                frameImg.onerror = (e) => {
-                  console.error("Error loading frame", e)
+                
+                frameImg.onerror = () => {
+                  console.error("Error loading frame:", currentFrame)
                   setDebugInfo(`Error loading frame: ${currentFrame}`)
                   resolve()
                 }
+                
                 frameImg.src = currentFrame
-              }
-            } else {
-              resolve()
+              })
             }
+            resolve()
           }
+          
           img.onerror = () => {
             console.error("Error loading image")
             setDebugInfo(`Error loading image: ${photos[i].substring(0, 50)}...`)
@@ -436,20 +500,31 @@ export function PhotoBooth() {
         })
       }
 
-      // Optional: Add title or branding.
+      // Add branding at the bottom
+      const brandingY = stripCanvas.height - bottomBrandingHeight + 20
       ctx.fillStyle = "black"
-      ctx.font = "bold 20px sans-serif"
+      ctx.fillRect(0, stripCanvas.height - bottomBrandingHeight, stripCanvas.width, bottomBrandingHeight)
+      
+      // Add logo/text
+      ctx.fillStyle = "white"
+      ctx.font = "bold 48px sans-serif"
       ctx.textAlign = "center"
-      ctx.fillText("SnapBooth", canvas.width / 2, 30)
+      ctx.fillText("SNAPBOOTH", stripCanvas.width / 2, brandingY + 30)
+      
+      // Add date
+      ctx.font = "24px sans-serif"
+      ctx.fillText(new Date().toLocaleDateString(), stripCanvas.width / 2, brandingY + 70)
 
-      // Convert the completed strip to a data URL.
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.9)
+      // Convert the completed strip to a data URL
+      const dataUrl = stripCanvas.toDataURL("image/jpeg", 0.95)
       setStripImage(dataUrl)
-
       setActiveTab("strip")
+    } catch (error) {
+      console.error("Error creating photo strip:", error)
+      setDebugInfo(`Strip error: ${error instanceof Error ? error.message : "Unknown error"}`)
+      setStripImage(null)
+      setActiveTab("camera")
     }
-
-    loadAndDrawImages()
   }
 
   // Filter function that modifies the image data.
@@ -516,13 +591,27 @@ export function PhotoBooth() {
   }
 
   // Reset the photobooth state.
-  const resetCamera = () => {
+  const resetCamera = async () => {
     setCapturedImages([])
     setStripImage(null)
     setIsCapturing(false)
     setCountdown(0)
     setUploadStatus(null)
     setActiveTab("camera")
+
+    // Stop current stream if it exists
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop())
+      setCameraStream(null)
+    }
+
+    // Clear video source
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+
+    // Reinitialize camera
+    await initializeCamera()
   }
 
   // Download the photo strip.
@@ -537,12 +626,12 @@ export function PhotoBooth() {
     }
   }
 
-  // Simulated upload function.
+  // Update the upload function to actually save photos
   const uploadStrip = async () => {
     if (!stripImage) return
     setUploadStatus("Uploading...")
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await savePhoto(stripImage)
       setUploadStatus("Upload successful! Your strip has been saved.")
     } catch (error) {
       console.error("Error uploading image:", error)
@@ -573,7 +662,12 @@ export function PhotoBooth() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <canvas ref={stripCanvasRef} style={{ display: "none" }} width="400" height="1200" />
+      <canvas 
+        ref={stripCanvasRef} 
+        style={{ display: "none" }} 
+        width={800 + (40 * 2) + (60 * 2)} // photoWidth + padding*2 + borderWidth*2
+        height={(600 * 4) + (40 * 5) + 120} // (photoHeight * 4) + (padding * 5) + bottomBrandingHeight
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} defaultValue="frames" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
@@ -722,7 +816,7 @@ export function PhotoBooth() {
                 )}
 
                 {stripImage && (
-                  <Button variant="outline" onClick={resetCamera} className="gap-2">
+                  <Button variant="outline" onClick={() => resetCamera()} className="gap-2">
                     <RefreshCw className="h-4 w-4" />
                     New Strip
                   </Button>
@@ -757,7 +851,6 @@ export function PhotoBooth() {
                     alt="Photo Strip"
                     className="h-full w-full object-contain"
                   />
-                  <canvas ref={stripCanvasRef} className="hidden" />
                 </div>
                 {uploadStatus && (
                   <div
@@ -773,7 +866,7 @@ export function PhotoBooth() {
                   </div>
                 )}
                 <div className="mt-6 flex justify-center gap-4">
-                  <Button variant="outline" onClick={resetCamera} className="gap-2">
+                  <Button variant="outline" onClick={() => resetCamera()} className="gap-2">
                     <RefreshCw className="h-4 w-4" />
                     New Strip
                   </Button>
