@@ -12,19 +12,16 @@ export const TEMPLATE_FRAMES = [
       id: "polaroid",
       name: "Polaroid",
       url: "data:image/svg+xml;base64," + btoa(`<svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <mask id="photo-mask">
-            <rect width="400" height="300" fill="white"/>
-            <rect x="20" y="20" width="360" height="220" fill="black"/>
-          </mask>
-        </defs>
-        <rect width="400" height="300" fill="white" rx="5" ry="5"/>
-        <rect x="20" y="20" width="360" height="220" fill="none" stroke="#333333" stroke-width="1"/>
-        <rect width="400" height="300" fill="white" mask="url(#photo-mask)" opacity="0.1"/>
-        <rect width="400" height="300" fill="none" stroke="#333333" stroke-width="1" rx="5" ry="5"/>
-        <text x="200" y="275" font-family="Arial" font-size="16" text-anchor="middle" fill="#333333" letter-spacing="2">POLAROID</text>
+        <path d="M0,0 h400 v300 h-400 Z" fill="#ffffff"/>
+        <path d="M20,20 h360 v220 h-360 Z" fill="none" stroke="#333333"/>
       </svg>`),
       description: "Classic polaroid style",
+      photoArea: {
+        x: 20,
+        y: 20,
+        width: 360,
+        height: 220
+      }
     },
     {
       id: "vintage",
