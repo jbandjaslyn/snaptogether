@@ -348,6 +348,90 @@ export function PhotoBooth() {
     }
   }
 
+  // Draw the image maintaining aspect ratio
+  const drawPhotoWithFrame = async (ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, width: number, height: number) => {
+    // First draw white background for Polaroid
+    if (currentFrame) {
+      ctx.fillStyle = "#ffffff"
+      ctx.fillRect(x, y, width, height)
+    }
+
+    // Calculate dimensions to maintain aspect ratio
+    const imgAspectRatio = img.width / img.height
+    const targetAspectRatio = width / height
+    
+    let drawWidth = width
+    let drawHeight = height
+    let offsetX = x
+    let offsetY = y
+    
+    // Find the frame template if it exists
+    const frameTemplate = TEMPLATE_FRAMES.find(f => f.url === currentFrame)
+    const photoArea = frameTemplate?.photoArea
+
+    if (photoArea) {
+      // If we have photo area specifications, use them
+      const photoWidth = (photoArea.width / 400) * width
+      const photoHeight = (photoArea.height / 300) * height
+      const photoX = x + (photoArea.x / 400) * width
+      const photoY = y + (photoArea.y / 300) * height
+
+      // Calculate photo dimensions maintaining aspect ratio
+      if (imgAspectRatio > photoWidth / photoHeight) {
+        drawHeight = photoWidth / imgAspectRatio
+        offsetY = photoY + (photoHeight - drawHeight) / 2
+        offsetX = photoX
+        drawWidth = photoWidth
+      } else {
+        drawWidth = photoHeight * imgAspectRatio
+        offsetX = photoX + (photoWidth - drawWidth) / 2
+        offsetY = photoY
+        drawHeight = photoHeight
+      }
+    } else {
+      // Default behavior for non-Polaroid frames
+      if (imgAspectRatio > targetAspectRatio) {
+        drawHeight = width / imgAspectRatio
+        offsetY = y + (height - drawHeight) / 2
+      } else {
+        drawWidth = height * imgAspectRatio
+        offsetX = x + (width - drawWidth) / 2
+      }
+    }
+
+    // Draw the image
+    ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight)
+
+    // If a frame is selected, apply it
+    if (currentFrame) {
+      const frameImg = new Image()
+      if (!currentFrame.startsWith('data:')) {
+        frameImg.crossOrigin = "anonymous"
+      }
+      
+      await new Promise<void>((resolve) => {
+        frameImg.onload = () => {
+          try {
+            ctx.drawImage(frameImg, x, y, width, height)
+            resolve()
+          } catch (error) {
+            console.error("Error drawing frame:", error)
+            setDebugInfo(`Error drawing frame: ${error instanceof Error ? error.message : 'Unknown error'}`)
+            resolve()
+          }
+        }
+        
+        frameImg.onerror = () => {
+          console.error("Error loading frame:", currentFrame)
+          setDebugInfo(`Error loading frame: ${currentFrame}`)
+          resolve()
+        }
+        
+        frameImg.src = currentFrame
+      })
+    }
+  }
+
   // Create a photo strip by stacking the 4 images.
   const createPhotoStrip = async (photos: string[]) => {
     try {
@@ -419,75 +503,7 @@ export function PhotoBooth() {
           img.crossOrigin = "anonymous"
           img.onload = async () => {
             const y = padding + (i * (photoHeight + padding))
-            
-            // Create white background for each photo
-            ctx.fillStyle = "white"
-            ctx.fillRect(borderWidth + padding, y, photoWidth, photoHeight)
-            
-            // Calculate dimensions to maintain aspect ratio
-            const imgAspectRatio = img.width / img.height
-            const targetAspectRatio = photoWidth / photoHeight
-            
-            let drawWidth = photoWidth
-            let drawHeight = photoHeight
-            let offsetX = 0
-            let offsetY = 0
-            
-            if (imgAspectRatio > targetAspectRatio) {
-              // Image is wider than target
-              drawHeight = photoWidth / imgAspectRatio
-              offsetY = (photoHeight - drawHeight) / 2
-            } else {
-              // Image is taller than target
-              drawWidth = photoHeight * imgAspectRatio
-              offsetX = (photoWidth - drawWidth) / 2
-            }
-            
-            // Draw the image maintaining aspect ratio
-            ctx.drawImage(
-              img, 
-              borderWidth + padding + offsetX, 
-              y + offsetY, 
-              drawWidth, 
-              drawHeight
-            )
-
-            // If a frame is selected, apply it
-            if (currentFrame) {
-              const frameImg = new Image()
-              
-              // For data URLs, we don't need crossOrigin
-              if (!currentFrame.startsWith('data:')) {
-                frameImg.crossOrigin = "anonymous"
-              }
-              
-              await new Promise<void>((resolve) => {
-                frameImg.onload = () => {
-                  try {
-                    ctx.drawImage(
-                      frameImg,
-                      borderWidth + padding,
-                      y,
-                      photoWidth,
-                      photoHeight
-                    )
-                    resolve()
-                  } catch (error) {
-                    console.error("Error drawing frame:", error)
-                    setDebugInfo(`Error drawing frame: ${error instanceof Error ? error.message : 'Unknown error'}`)
-                    resolve()
-                  }
-                }
-                
-                frameImg.onerror = () => {
-                  console.error("Error loading frame:", currentFrame)
-                  setDebugInfo(`Error loading frame: ${currentFrame}`)
-                  resolve()
-                }
-                
-                frameImg.src = currentFrame
-              })
-            }
+            await drawPhotoWithFrame(ctx, img, borderWidth + padding, y, photoWidth, photoHeight)
             resolve()
           }
           
