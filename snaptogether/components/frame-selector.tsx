@@ -29,9 +29,9 @@ export function FrameSelector({ currentFrame, customFrames, onFrameChange }: Fra
   // Function to render a preview of the SVG frame
   const renderFramePreview = (frame: { id?: string; name: any; url: any; description?: string | undefined }) => {
     // For template frames, use the SVG content
-    const templateFrame = TEMPLATE_FRAMES.find((f) => f.url === frame.url)
+    const templateFrame = TEMPLATE_FRAMES.find((f) => f.url === frame.url) as { svgContent?: string }
 
-    if (templateFrame && templateFrame.svgContent) {
+    if (templateFrame?.svgContent) {
       return (
         <div
           className="h-full w-full flex items-center justify-center"

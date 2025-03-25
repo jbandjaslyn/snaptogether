@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 "use client"
 
-import { useRef, useState, useEffect } from "react"
+import { useRef, useState, useEffect, SetStateAction } from "react"
 import { Camera, Download, RefreshCw, Upload, Play, AlertCircle, ImageIcon, Check } from "lucide-react"
 
 import { Button } from "@/components/button"
@@ -54,7 +56,7 @@ export function PhotoBooth() {
         }
       } catch (e) {
         console.error("Error loading saved frames:", e)
-        setDebugInfo(`Error loading saved frames: ${e.message}`)
+        setDebugInfo(`Error loading saved frames: ${e instanceof Error ? e.message : String(e)}`)
       }
     }
   }, [])
@@ -169,11 +171,11 @@ export function PhotoBooth() {
           // Set a timeout in case onloadedmetadata doesn't fire
           const timeoutId = setTimeout(() => {
             videoRef.current?.removeEventListener('loadedmetadata', onLoadedMetadata)
-            if (videoRef.current?.readyState >= 2) {
+            if ((videoRef.current?.readyState ?? 0) >= 2) {
               setDebugInfo("Video ready state check passed")
               resolve()
             } else {
-              setDebugInfo(`Video not ready: readyState=${videoRef.current?.readyState}`)
+              setDebugInfo(`Video not ready: readyState=${videoRef.current?.readyState ?? 'undefined'}`)
               reject("Video metadata loading timeout")
             }
           }, 5000)
@@ -228,12 +230,12 @@ export function PhotoBooth() {
   }
 
   // Run a countdown and return a promise that resolves when done.
-  const runCountdown = (seconds) => {
-    return new Promise((resolve) => {
+  const runCountdown = (seconds: SetStateAction<number | null>) => {
+    return new Promise<void>((resolve) => {
       setCountdown(seconds)
       const interval = setInterval(() => {
         setCountdown((prev) => {
-          if (prev <= 1) {
+          if (prev === null || prev <= 1) {
             clearInterval(interval)
             resolve()
             return 0
@@ -285,7 +287,7 @@ export function PhotoBooth() {
       return canvas.toDataURL("image/png")
     } catch (err) {
       console.error("Error capturing photo:", err)
-      setDebugInfo(`Capture error: ${err.message}`)
+      setDebugInfo(`Capture error: ${err instanceof Error ? err.message : String(err)}`)
       return null
     }
   }
@@ -699,7 +701,7 @@ export function PhotoBooth() {
     }
   }
 
-  const handleFilterChange = (filter) => {
+  const handleFilterChange = (filter: SetStateAction<string>) => {
     setCurrentFilter(filter)
   }
 
@@ -810,14 +812,14 @@ export function PhotoBooth() {
               <div className="text-center mb-4">
                 <h3 className="text-lg font-semibold mb-1">Step 2: Take Your Photos</h3>
                 <p className="text-muted-foreground text-sm">
-                  Using the "
-                  {currentFrame ? TEMPLATE_FRAMES.find((f) => f.url === currentFrame)?.name || "Custom" : "selected"}"
+                  Using the &quot;
+                  {currentFrame ? TEMPLATE_FRAMES.find((f) => f.url === currentFrame)?.name || "Custom" : "selected"}&quot;
                   frame
                 </p>
               </div>
 
               <div className="relative overflow-hidden rounded-lg bg-black aspect-video">
-                {isCapturing && countdown > 0 && (
+                {isCapturing && countdown !== null && countdown > 0 && (
                   <div
                     className="absolute inset-0 flex items-center justify-center z-10"
                     style={{ backgroundColor: "rgba(0,0,0,0.5)" }}

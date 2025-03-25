@@ -12,9 +12,9 @@ export function InfoCircle({ text }: InfoCircleProps) {
         <TooltipTrigger asChild>
           <Info className="h-4 w-4 text-muted-foreground cursor-help" />
         </TooltipTrigger>
-        <TooltipContent>
+        <TooltipContent/>
           <p className="max-w-xs text-xs">{text}</p>
-        </TooltipContent>
+        
       </Tooltip>
     </TooltipProvider>
   )
