@@ -108,8 +108,17 @@ export function PhotoBooth() {
     }
   }, [cameraStream])
 
+  // Add a new effect to handle tab changes
+  useEffect(() => {
+    if (activeTab === "camera" && setupComplete && !isCameraActive && !isCameraLoading) {
+      initializeCamera()
+    }
+  }, [activeTab, setupComplete])
+
   // Initialize camera access
   const initializeCamera = async () => {
+    if (isCameraLoading) return // Prevent multiple simultaneous initialization attempts
+    
     setIsCameraLoading(true)
     setCameraError(null)
     setDebugInfo("Initializing camera...")
@@ -118,6 +127,12 @@ export function PhotoBooth() {
       // Stop any existing stream
       if (cameraStream) {
         cameraStream.getTracks().forEach((track) => track.stop())
+        setCameraStream(null)
+      }
+
+      // Clear video source
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
       }
 
       // Request camera access
@@ -132,6 +147,7 @@ export function PhotoBooth() {
 
       setDebugInfo("Requesting camera access...")
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      
       setCameraStream(stream)
       setDebugInfo("Camera access granted, setting up video element...")
 
@@ -142,13 +158,17 @@ export function PhotoBooth() {
         await new Promise<void>((resolve, reject) => {
           if (!videoRef.current) return reject("Video element not found")
 
-          videoRef.current.onloadedmetadata = () => {
+          const onLoadedMetadata = () => {
             setDebugInfo("Video metadata loaded")
+            videoRef.current?.removeEventListener('loadedmetadata', onLoadedMetadata)
             resolve()
           }
 
+          videoRef.current.addEventListener('loadedmetadata', onLoadedMetadata)
+
           // Set a timeout in case onloadedmetadata doesn't fire
-          setTimeout(() => {
+          const timeoutId = setTimeout(() => {
+            videoRef.current?.removeEventListener('loadedmetadata', onLoadedMetadata)
             if (videoRef.current?.readyState >= 2) {
               setDebugInfo("Video ready state check passed")
               resolve()
@@ -157,6 +177,9 @@ export function PhotoBooth() {
               reject("Video metadata loading timeout")
             }
           }, 5000)
+
+          // Cleanup timeout if we resolve successfully
+          return () => clearTimeout(timeoutId)
         })
 
         // Start playing the video
@@ -166,18 +189,17 @@ export function PhotoBooth() {
 
         setIsCameraActive(true)
         setCameraPermission(true)
-        setIsCameraLoading(false)
       } else {
-        setDebugInfo("Video element not found")
         throw new Error("Video element not found")
       }
     } catch (err) {
       console.error("Camera initialization error:", err)
-      setDebugInfo(`Camera error: ${err.message || "Unknown error"}`)
+      setDebugInfo(`Camera error: ${err instanceof Error ? err.message : "Unknown error"}`)
       setCameraPermission(false)
-      setIsCameraLoading(false)
-      setCameraError(err.message || "Failed to access camera")
+      setCameraError(err instanceof Error ? err.message : "Failed to access camera")
       setIsCameraActive(false)
+    } finally {
+      setIsCameraLoading(false)
     }
   }
 
@@ -203,11 +225,6 @@ export function PhotoBooth() {
 
     setSetupComplete(true)
     setActiveTab("camera")
-
-    // Initialize camera automatically when moving to camera tab
-    if (!isCameraActive && !isCameraLoading) {
-      initializeCamera()
-    }
   }
 
   // Run a countdown and return a promise that resolves when done.
@@ -358,12 +375,6 @@ export function PhotoBooth() {
 
     // Calculate dimensions to maintain aspect ratio
     const imgAspectRatio = img.width / img.height
-    const targetAspectRatio = width / height
-    
-    let drawWidth = width
-    let drawHeight = height
-    let offsetX = x
-    let offsetY = y
     
     // Find the frame template if it exists
     const frameTemplate = TEMPLATE_FRAMES.find(f => f.url === currentFrame)
@@ -375,32 +386,59 @@ export function PhotoBooth() {
       const photoHeight = (photoArea.height / 300) * height
       const photoX = x + (photoArea.x / 400) * width
       const photoY = y + (photoArea.y / 300) * height
+      const photoAreaAspectRatio = photoWidth / photoHeight
 
-      // Calculate photo dimensions maintaining aspect ratio
-      if (imgAspectRatio > photoWidth / photoHeight) {
-        drawHeight = photoWidth / imgAspectRatio
-        offsetY = photoY + (photoHeight - drawHeight) / 2
-        offsetX = photoX
-        drawWidth = photoWidth
-      } else {
-        drawWidth = photoHeight * imgAspectRatio
-        offsetX = photoX + (photoWidth - drawWidth) / 2
-        offsetY = photoY
+      let drawWidth, drawHeight, offsetX, offsetY
+
+      // Fill the photo area completely while maintaining aspect ratio
+      if (imgAspectRatio > photoAreaAspectRatio) {
+        // Image is wider than the photo area
         drawHeight = photoHeight
-      }
-    } else {
-      // Default behavior for non-Polaroid frames
-      if (imgAspectRatio > targetAspectRatio) {
-        drawHeight = width / imgAspectRatio
-        offsetY = y + (height - drawHeight) / 2
+        drawWidth = photoHeight * imgAspectRatio
+        offsetY = photoY
+        offsetX = photoX - (drawWidth - photoWidth) / 2
       } else {
-        drawWidth = height * imgAspectRatio
-        offsetX = x + (width - drawWidth) / 2
+        // Image is taller than the photo area
+        drawWidth = photoWidth
+        drawHeight = photoWidth / imgAspectRatio
+        offsetX = photoX
+        offsetY = photoY - (drawHeight - photoHeight) / 2
       }
-    }
 
-    // Draw the image
-    ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight)
+      // Draw the image
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(photoX, photoY, photoWidth, photoHeight)
+      ctx.clip()
+      ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight)
+      ctx.restore()
+    } else {
+      // Default behavior for non-template frames
+      let drawWidth = width
+      let drawHeight = height
+      let offsetX = x
+      let offsetY = y
+
+      if (imgAspectRatio > width / height) {
+        // Image is wider than the frame
+        drawHeight = height
+        drawWidth = height * imgAspectRatio
+        offsetX = x - (drawWidth - width) / 2
+      } else {
+        // Image is taller than the frame
+        drawWidth = width
+        drawHeight = width / imgAspectRatio
+        offsetY = y - (drawHeight - height) / 2
+      }
+
+      // Draw the image
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(x, y, width, height)
+      ctx.clip()
+      ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight)
+      ctx.restore()
+    }
 
     // If a frame is selected, apply it
     if (currentFrame) {
@@ -608,12 +646,15 @@ export function PhotoBooth() {
 
   // Reset the photobooth state.
   const resetCamera = async () => {
+    // Set camera tab first
+    setActiveTab("camera")
+    
+    // Then reset all other states
     setCapturedImages([])
     setStripImage(null)
     setIsCapturing(false)
     setCountdown(0)
     setUploadStatus(null)
-    setActiveTab("camera")
 
     // Stop current stream if it exists
     if (cameraStream) {
@@ -625,6 +666,9 @@ export function PhotoBooth() {
     if (videoRef.current) {
       videoRef.current.srcObject = null
     }
+
+    // Small delay to ensure state updates have propagated
+    await new Promise(resolve => setTimeout(resolve, 100))
 
     // Reinitialize camera
     await initializeCamera()
@@ -685,7 +729,21 @@ export function PhotoBooth() {
         height={(600 * 4) + (40 * 5) + 120} // (photoHeight * 4) + (padding * 5) + bottomBrandingHeight
       />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} defaultValue="frames" className="w-full">
+      <Tabs 
+        value={activeTab} 
+        onValueChange={(value) => {
+          setActiveTab(value)
+          // If switching to camera tab and we need to initialize
+          if (value === "camera" && setupComplete && !isCameraActive && !isCameraLoading) {
+            // Small delay to ensure state updates have propagated
+            setTimeout(() => {
+              initializeCamera()
+            }, 100)
+          }
+        }} 
+        defaultValue="frames" 
+        className="w-full"
+      >
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="frames">1. Choose Frame</TabsTrigger>
           <TabsTrigger value="camera" disabled={!frameSelected || !setupComplete}>
