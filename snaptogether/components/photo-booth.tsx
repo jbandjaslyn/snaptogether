@@ -79,49 +79,63 @@ export function PhotoBooth() {
   useEffect(() => {
     if (!isCameraActive || !setupComplete) return
 
-    const updateCanvas = () => {
-      const canvas = canvasRef.current
-      const video = videoRef.current
-      if (canvas && video && video.readyState >= 2 && !video.paused) {
-        const context = canvas.getContext("2d")
-        if (context) {
-          // Log video and canvas dimensions
-          setDebugInfo(`Video dimensions: ${video.videoWidth}x${video.videoHeight}, ` +
-            `Canvas dimensions: ${canvas.width}x${canvas.height}, ` +
-            `Video ready state: ${video.readyState}, ` +
-            `Video paused: ${video.paused}, ` +
-            `Video element dimensions: ${video.offsetWidth}x${video.offsetHeight}, ` +
-            `Canvas element dimensions: ${canvas.offsetWidth}x${canvas.offsetHeight}, ` +
-            `Video playing: ${!video.paused}, ` +
-            `Video current time: ${video.currentTime}, ` +
-            `Video error: ${video.error?.message || 'none'}, ` +
-            `User Agent: ${navigator.userAgent}`)
+    let animationFrameId: number;
+    let lastUpdate = 0;
+    const minUpdateInterval = 100; // Minimum time between updates in ms
 
-          // Set canvas dimensions to match video
-          canvas.width = video.videoWidth || 640
-          canvas.height = video.videoHeight || 480
-          // Draw the video frame
-          try {
-            context.drawImage(video, 0, 0, canvas.width, canvas.height)
-            // Apply the filter
-            applyFilter(context, currentFilter, canvas.width, canvas.height)
-          } catch (err) {
-            setDebugInfo(`Draw error: ${err instanceof Error ? err.message : String(err)}`)
+    const updateCanvas = (timestamp: number) => {
+      // Only update if enough time has passed
+      if (timestamp - lastUpdate >= minUpdateInterval) {
+        const canvas = canvasRef.current
+        const video = videoRef.current
+        
+        if (canvas && video && video.readyState >= 2 && !video.paused) {
+          const context = canvas.getContext('2d')
+          if (context) {
+            // Set canvas dimensions to match video
+            if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+              canvas.width = video.videoWidth
+              canvas.height = video.videoHeight
+            }
+
+            // Always draw the video frame to maintain consistency
+            try {
+              context.drawImage(video, 0, 0, canvas.width, canvas.height)
+              if (currentFilter !== 'none') {
+                applyFilter(context, currentFilter, canvas.width, canvas.height)
+              }
+            } catch (err) {
+              console.error('Draw error:', err)
+            }
+          }
+
+          // Update debug info less frequently
+          if (timestamp - lastUpdate >= 1000) {
+            setDebugInfo(`Video dimensions: ${video.videoWidth}x${video.videoHeight}, ` +
+              `Canvas dimensions: ${canvas.width}x${canvas.height}, ` +
+              `Video ready state: ${video.readyState}, ` +
+              `Video paused: ${video.paused}, ` +
+              `Video element dimensions: ${video.offsetWidth}x${video.offsetHeight}, ` +
+              `Canvas element dimensions: ${canvas.offsetWidth}x${canvas.offsetHeight}, ` +
+              `Video playing: ${!video.paused}, ` +
+              `Video current time: ${video.currentTime}, ` +
+              `Video error: ${video.error?.message || 'none'}, ` +
+              `User Agent: ${navigator.userAgent}`)
           }
         }
-      } else {
-        setDebugInfo(`Canvas/Video state: ` +
-          `Canvas exists: ${!!canvas}, ` +
-          `Video exists: ${!!video}, ` +
-          `Video ready state: ${video?.readyState}, ` +
-          `Video paused: ${video?.paused}, ` +
-          `Video dimensions: ${video?.videoWidth}x${video?.videoHeight}`)
+        lastUpdate = timestamp
       }
+      
+      animationFrameId = requestAnimationFrame(updateCanvas)
     }
 
-    const intervalId = setInterval(updateCanvas, 1000) // Update every second for debugging
+    animationFrameId = requestAnimationFrame(updateCanvas)
 
-    return () => clearInterval(intervalId)
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId)
+      }
+    }
   }, [currentFilter, isCameraActive, setupComplete])
 
   // Cleanup camera on unmount
@@ -344,18 +358,16 @@ export function PhotoBooth() {
 
   // Sequentially capture 4 photos.
   const runPhotoSequence = async () => {
-    // Verify camera is active and ready
-    if (!isCameraActive || !cameraStream) {
+    if (!isCameraActive || !cameraStream || !videoRef.current) {
       setCameraError("Camera is not active. Please start the camera first.")
       return
     }
 
-    if (!videoRef.current || videoRef.current.readyState < 2) {
+    if (videoRef.current.readyState < 2) {
       setCameraError("Video stream is not ready. Please wait a moment and try again.")
       return
     }
 
-    // Check if frame is selected
     if (!frameSelected) {
       setCameraError("Please select a frame before taking photos.")
       return
@@ -364,56 +376,56 @@ export function PhotoBooth() {
     setIsCapturing(true)
     setStripImage(null)
     setCameraError(null)
-    setCapturedImages([]) // Reset captured images
+    setCapturedImages([])
 
     const photos: string[] = []
+    const video = videoRef.current
 
     try {
+      // Initial play attempt if needed
+      if (video.paused) {
+        await video.play()
+      }
+
       for (let i = 0; i < 4; i++) {
+        // Run countdown first
         await runCountdown(3)
 
-        // Ensure video is still playing
-        if (videoRef.current?.paused) {
-          try {
-            await videoRef.current.play()
-          } catch (err) {
-            console.error("Failed to resume video:", err)
-            setDebugInfo(`Failed to resume video: ${err instanceof Error ? err.message : 'Unknown error'}`)
-          }
+        // Ensure video is playing before capture
+        if (video.paused) {
+          await video.play()
         }
 
-        // Capture photo with retry
-        let photo: string | null = null
-        for (let attempt = 0; attempt < 3 && !photo; attempt++) {
-          photo = capturePhoto()
-          if (!photo) {
-            // Small delay before retry
-            await new Promise(r => setTimeout(r, 100))
-          }
-        }
+        // Wait for the next frame before capturing
+        await new Promise(requestAnimationFrame)
 
+        // Capture the photo
+        const photo = capturePhoto()
         if (!photo) {
-          throw new Error("Failed to capture photo after multiple attempts")
+          throw new Error("Failed to capture photo")
         }
 
         photos.push(photo)
-        setCapturedImages([...photos]) // Update UI with each photo
-        
-        // Small delay to ensure UI updates
-        await new Promise(r => setTimeout(r, 100))
+        setCapturedImages([...photos])
+
+        // Don't wait after the last photo
+        if (i < 3) {
+          await new Promise(resolve => setTimeout(resolve, 250))
+        }
       }
 
-      // Only create strip if we have all 4 photos
       if (photos.length === 4) {
         await createPhotoStrip(photos)
-      } else {
-        throw new Error(`Expected 4 photos but got ${photos.length}`)
       }
     } catch (error) {
       console.error("Photo sequence error:", error)
       setCameraError(error instanceof Error ? error.message : "Failed to complete photo sequence")
     } finally {
       setIsCapturing(false)
+      // Ensure video is playing after sequence
+      if (video.paused) {
+        video.play().catch(console.error)
+      }
     }
   }
 
@@ -545,23 +557,26 @@ export function PhotoBooth() {
         })
       }
 
-      // Format date consistently
-      const now = new Date()
-      const formattedDate = now.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      })
+      // Add branding at the bottom only if no custom frame is selected
+      if (!currentFrame || TEMPLATE_FRAMES.some(frame => frame.url === currentFrame)) {
+        // Format date consistently
+        const now = new Date()
+        const formattedDate = now.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        })
 
-      // Add branding at the bottom
-      ctx.fillStyle = "black"
-      ctx.font = "bold 72px sans-serif"
-      ctx.textAlign = "center"
-      ctx.fillText("SnapTogether", stripCanvas.width / 2, 3320)
-      
-      // Add date with consistent formatting
-      ctx.font = "36px sans-serif"
-      ctx.fillText(formattedDate, stripCanvas.width / 2, 3380)
+        // Add branding at the bottom
+        ctx.fillStyle = "black"
+        ctx.font = "bold 72px sans-serif"
+        ctx.textAlign = "center"
+        ctx.fillText("SnapTogether", stripCanvas.width / 2, 3320)
+        
+        // Add date with consistent formatting
+        ctx.font = "36px sans-serif"
+        ctx.fillText(formattedDate, stripCanvas.width / 2, 3380)
+      }
 
       // Convert the completed strip to a data URL
       const dataUrl = stripCanvas.toDataURL("image/jpeg", 0.95)
@@ -831,16 +846,12 @@ export function PhotoBooth() {
 
               <div className="relative overflow-hidden rounded-lg bg-black md:aspect-[4/3]">
                 {/* Mobile container */}
-                <div className="md:hidden relative w-full bg-black" style={{ aspectRatio: '3/4' }}>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    {/* Debug overlay */}
-                    <div className="absolute top-0 left-0 z-30 p-2 bg-black/50 text-white text-xs">
-                      <div>Window: {typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight}` : 'N/A'}</div>
-                      <div>Container: {videoRef.current?.parentElement?.offsetWidth}x{videoRef.current?.parentElement?.offsetHeight}</div>
-                      <div>Video: {videoRef.current?.offsetWidth}x{videoRef.current?.offsetHeight}</div>
-                      <div>Canvas: {canvasRef.current?.offsetWidth}x{canvasRef.current?.offsetHeight}</div>
-                    </div>
-
+                <div className="md:hidden relative w-full bg-black" style={{ 
+                  height: 'calc(100vh - 300px)',
+                  minHeight: '400px',
+                  maxHeight: '600px'
+                }}>
+                  <div className="absolute inset-0">
                     {/* Video container */}
                     <div className="absolute inset-0 bg-black">
                       <video 
@@ -849,11 +860,21 @@ export function PhotoBooth() {
                         playsInline 
                         muted 
                         className="absolute inset-0 w-full h-full object-cover"
+                        style={{ visibility: currentFilter === 'none' ? 'visible' : 'hidden' }}
                       />
                       <canvas 
                         ref={canvasRef} 
                         className="absolute inset-0 w-full h-full object-cover"
+                        style={{ visibility: currentFilter === 'none' ? 'hidden' : 'visible' }}
                       />
+                    </div>
+
+                    {/* Debug overlay */}
+                    <div className="absolute top-0 left-0 z-30 p-2 bg-black/50 text-white text-xs">
+                      <div>Window: {typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight}` : 'N/A'}</div>
+                      <div>Container: {videoRef.current?.parentElement?.offsetWidth}x{videoRef.current?.parentElement?.offsetHeight}</div>
+                      <div>Video: {videoRef.current?.offsetWidth}x{videoRef.current?.offsetHeight}</div>
+                      <div>Canvas: {canvasRef.current?.offsetWidth}x{canvasRef.current?.offsetHeight}</div>
                     </div>
 
                     {/* Overlay states */}
@@ -924,11 +945,13 @@ export function PhotoBooth() {
                     autoPlay 
                     playsInline 
                     muted 
-                    className="w-full h-full object-cover" 
+                    className="w-full h-full object-cover"
+                    style={{ visibility: currentFilter === 'none' ? 'visible' : 'hidden' }}
                   />
                   <canvas 
                     ref={canvasRef} 
                     className="absolute inset-0 w-full h-full" 
+                    style={{ visibility: currentFilter === 'none' ? 'hidden' : 'visible' }}
                   />
 
                   {isCapturing && countdown === 0 && (
