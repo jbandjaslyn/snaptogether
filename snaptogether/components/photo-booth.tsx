@@ -830,35 +830,45 @@ export function PhotoBooth() {
               </div>
 
               <div className="relative overflow-hidden rounded-lg bg-black md:aspect-[4/3]">
-                {/* Aspect ratio container for mobile only */}
-                <div className="md:hidden relative w-full" style={{ 
-                  paddingBottom: "133.33%",
-                  minHeight: "300px",
-                  height: "100vh",
-                  maxHeight: "80vh"
-                }}>
-                  <div className="absolute inset-0 flex items-center justify-center bg-black">
-                    {/* Debug overlay - always visible in top-left corner */}
+                {/* Mobile container */}
+                <div className="md:hidden relative w-full bg-black" style={{ aspectRatio: '3/4' }}>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {/* Debug overlay */}
                     <div className="absolute top-0 left-0 z-30 p-2 bg-black/50 text-white text-xs">
+                      <div>Window: {typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight}` : 'N/A'}</div>
                       <div>Container: {videoRef.current?.parentElement?.offsetWidth}x{videoRef.current?.parentElement?.offsetHeight}</div>
                       <div>Video: {videoRef.current?.offsetWidth}x{videoRef.current?.offsetHeight}</div>
                       <div>Canvas: {canvasRef.current?.offsetWidth}x{canvasRef.current?.offsetHeight}</div>
                     </div>
 
+                    {/* Video container */}
+                    <div className="absolute inset-0 bg-black">
+                      <video 
+                        ref={videoRef} 
+                        autoPlay 
+                        playsInline 
+                        muted 
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                      <canvas 
+                        ref={canvasRef} 
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    </div>
+
+                    {/* Overlay states */}
                     {isCapturing && countdown !== null && countdown > 0 && (
                       <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/50">
                         <div className="text-white text-7xl font-bold">{countdown}</div>
                       </div>
                     )}
 
-                    {/* Camera loading state */}
                     {isCameraLoading && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
                         <div className="text-white">Loading camera...</div>
                       </div>
                     )}
 
-                    {/* Camera not started state */}
                     {!isCameraActive && !isCameraLoading && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
                         <Camera className="h-12 w-12 text-white mb-4" />
@@ -870,32 +880,6 @@ export function PhotoBooth() {
                       </div>
                     )}
 
-                    <div className="absolute inset-0 w-full h-full">
-                      <video 
-                        ref={videoRef} 
-                        autoPlay 
-                        playsInline 
-                        muted 
-                        className="absolute inset-0 w-full h-full object-cover"
-                        style={{ 
-                          minWidth: '100%', 
-                          minHeight: '100%',
-                          width: '100%',
-                          height: '100%'
-                        }}
-                      />
-                      <canvas 
-                        ref={canvasRef} 
-                        className="absolute inset-0 w-full h-full"
-                        style={{ 
-                          minWidth: '100%', 
-                          minHeight: '100%',
-                          width: '100%',
-                          height: '100%'
-                        }}
-                      />
-                    </div>
-
                     {isCapturing && countdown === 0 && (
                       <div className="absolute bottom-0 left-0 right-0 p-4 z-20">
                         <Progress value={(capturedImages.length / 4) * 100} className="h-2" />
@@ -905,7 +889,7 @@ export function PhotoBooth() {
                   </div>
                 </div>
 
-                {/* Desktop content */}
+                {/* Desktop container - no changes */}
                 <div className="hidden md:block relative">
                   {isCapturing && countdown !== null && countdown > 0 && (
                     <div
