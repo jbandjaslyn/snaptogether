@@ -132,10 +132,11 @@ export function PhotoBooth() {
         setCameraStream(null)
       }
 
-      // Clear video source
+      // Clear video source and reset state
       if (videoRef.current) {
         videoRef.current.srcObject = null
       }
+      setIsCameraActive(false)
 
       // Request camera access
       const constraints = {
@@ -163,7 +164,13 @@ export function PhotoBooth() {
           const onLoadedMetadata = () => {
             setDebugInfo("Video metadata loaded")
             videoRef.current?.removeEventListener('loadedmetadata', onLoadedMetadata)
-            resolve()
+            videoRef.current?.play().then(() => {
+              setDebugInfo("Video playback started after metadata load")
+              resolve()
+            }).catch((err) => {
+              setDebugInfo(`Failed to start video playback: ${err.message}`)
+              reject(err)
+            })
           }
 
           videoRef.current.addEventListener('loadedmetadata', onLoadedMetadata)
@@ -172,8 +179,13 @@ export function PhotoBooth() {
           const timeoutId = setTimeout(() => {
             videoRef.current?.removeEventListener('loadedmetadata', onLoadedMetadata)
             if ((videoRef.current?.readyState ?? 0) >= 2) {
-              setDebugInfo("Video ready state check passed")
-              resolve()
+              videoRef.current?.play().then(() => {
+                setDebugInfo("Video playback started after timeout")
+                resolve()
+              }).catch((err) => {
+                setDebugInfo(`Failed to start video playback after timeout: ${err.message}`)
+                reject(err)
+              })
             } else {
               setDebugInfo(`Video not ready: readyState=${videoRef.current?.readyState ?? 'undefined'}`)
               reject("Video metadata loading timeout")
@@ -184,13 +196,9 @@ export function PhotoBooth() {
           return () => clearTimeout(timeoutId)
         })
 
-        // Start playing the video
-        setDebugInfo("Starting video playback...")
-        await videoRef.current.play()
-        setDebugInfo("Video playback started")
-
         setIsCameraActive(true)
         setCameraPermission(true)
+        setDebugInfo("Camera initialization complete")
       } else {
         throw new Error("Video element not found")
       }
@@ -368,108 +376,57 @@ export function PhotoBooth() {
   }
 
   // Draw the image maintaining aspect ratio
-  const drawPhotoWithFrame = async (ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, width: number, height: number) => {
-    // First draw white background for Polaroid
+  const drawPhotoWithFrame = async (ctx: CanvasRenderingContext2D, img: HTMLImageElement, frameIndex: number) => {
+    // Get frame info if a frame is selected
+    let frameInfo = null
     if (currentFrame) {
-      ctx.fillStyle = "#ffffff"
-      ctx.fillRect(x, y, width, height)
+      const selectedFrame = TEMPLATE_FRAMES.find(f => f.url === currentFrame)
+      if (selectedFrame) {
+        frameInfo = selectedFrame.photoArea
+      }
     }
+
+    // Default photo area if no frame selected
+    const defaultPhotoArea = {
+      width: 1000,
+      height: 700,
+      x: 100,
+      y: 80,
+      spacing: 760
+    }
+
+    const photoArea = frameInfo || defaultPhotoArea
+
+    // Calculate y position based on frame index
+    const y = photoArea.y + (frameIndex * photoArea.spacing)
 
     // Calculate dimensions to maintain aspect ratio
     const imgAspectRatio = img.width / img.height
-    
-    // Find the frame template if it exists
-    const frameTemplate = TEMPLATE_FRAMES.find(f => f.url === currentFrame)
-    const photoArea = frameTemplate?.photoArea
+    const photoAspectRatio = photoArea.width / photoArea.height
 
-    if (photoArea) {
-      // If we have photo area specifications, use them
-      const photoWidth = (photoArea.width / 400) * width
-      const photoHeight = (photoArea.height / 300) * height
-      const photoX = x + (photoArea.x / 400) * width
-      const photoY = y + (photoArea.y / 300) * height
-      const photoAreaAspectRatio = photoWidth / photoHeight
+    let drawWidth, drawHeight, offsetX, offsetY
 
-      let drawWidth, drawHeight, offsetX, offsetY
-
-      // Fill the photo area completely while maintaining aspect ratio
-      if (imgAspectRatio > photoAreaAspectRatio) {
-        // Image is wider than the photo area
-        drawHeight = photoHeight
-        drawWidth = photoHeight * imgAspectRatio
-        offsetY = photoY
-        offsetX = photoX - (drawWidth - photoWidth) / 2
-      } else {
-        // Image is taller than the photo area
-        drawWidth = photoWidth
-        drawHeight = photoWidth / imgAspectRatio
-        offsetX = photoX
-        offsetY = photoY - (drawHeight - photoHeight) / 2
-      }
-
-      // Draw the image
-      ctx.save()
-      ctx.beginPath()
-      ctx.rect(photoX, photoY, photoWidth, photoHeight)
-      ctx.clip()
-      ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight)
-      ctx.restore()
+    if (imgAspectRatio > photoAspectRatio) {
+      // Image is wider than the photo area - fit to height
+      drawHeight = photoArea.height
+      drawWidth = drawHeight * imgAspectRatio
+      offsetX = photoArea.x + (photoArea.width - drawWidth) / 2
+      offsetY = y
     } else {
-      // Default behavior for non-template frames
-      let drawWidth = width
-      let drawHeight = height
-      let offsetX = x
-      let offsetY = y
-
-      if (imgAspectRatio > width / height) {
-        // Image is wider than the frame
-        drawHeight = height
-        drawWidth = height * imgAspectRatio
-        offsetX = x - (drawWidth - width) / 2
-      } else {
-        // Image is taller than the frame
-        drawWidth = width
-        drawHeight = width / imgAspectRatio
-        offsetY = y - (drawHeight - height) / 2
-      }
-
-      // Draw the image
-      ctx.save()
-      ctx.beginPath()
-      ctx.rect(x, y, width, height)
-      ctx.clip()
-      ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight)
-      ctx.restore()
+      // Image is taller than the photo area - fit to width
+      drawWidth = photoArea.width
+      drawHeight = drawWidth / imgAspectRatio
+      offsetX = photoArea.x
+      offsetY = y + (photoArea.height - drawHeight) / 2
     }
 
-    // If a frame is selected, apply it
-    if (currentFrame) {
-      const frameImg = new Image()
-      if (!currentFrame.startsWith('data:')) {
-        frameImg.crossOrigin = "anonymous"
-      }
-      
-      await new Promise<void>((resolve) => {
-        frameImg.onload = () => {
-          try {
-            ctx.drawImage(frameImg, x, y, width, height)
-            resolve()
-          } catch (error) {
-            console.error("Error drawing frame:", error)
-            setDebugInfo(`Error drawing frame: ${error instanceof Error ? error.message : 'Unknown error'}`)
-            resolve()
-          }
-        }
-        
-        frameImg.onerror = () => {
-          console.error("Error loading frame:", currentFrame)
-          setDebugInfo(`Error loading frame: ${currentFrame}`)
-          resolve()
-        }
-        
-        frameImg.src = currentFrame
-      })
-    }
+    // Draw the image
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(photoArea.x, y, photoArea.width, photoArea.height)
+    ctx.clip()
+    ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight)
+    ctx.restore()
   }
 
   // Create a photo strip by stacking the 4 images.
@@ -479,61 +436,52 @@ export function PhotoBooth() {
         throw new Error("Not enough photos to create a strip")
       }
 
-      // Initialize strip canvas with proper dimensions
+      // Initialize strip canvas
       const stripCanvas = stripCanvasRef.current
       if (!stripCanvas) {
         throw new Error("Strip canvas not found")
       }
 
-      // Define dimensions with film strip aesthetics
-      const photoWidth = 800 // Make photos larger
-      const photoHeight = 600
-      const padding = 40 // Larger padding
-      const borderWidth = 60 // Width of the black film strip border
-      const bottomBrandingHeight = 120 // Height for the branding section
-
-      // Set canvas size for a vertical strip with borders
-      stripCanvas.width = photoWidth + (padding * 2) + (borderWidth * 2)
-      stripCanvas.height = (photoHeight * 4) + (padding * 5) + bottomBrandingHeight
+      // Set canvas size to match template dimensions
+      stripCanvas.width = 1200
+      stripCanvas.height = 3600
 
       const ctx = stripCanvas.getContext("2d")
       if (!ctx) {
         throw new Error("Could not get canvas context")
       }
 
-      // Clear any previous content
-      ctx.clearRect(0, 0, stripCanvas.width, stripCanvas.height)
-
-      // Fill background with black for film strip effect
-      ctx.fillStyle = "black"
+      // Clear canvas with white background
+      ctx.fillStyle = "white"
       ctx.fillRect(0, 0, stripCanvas.width, stripCanvas.height)
 
-      // Draw the film strip holes
-      const holeRadius = 20
-      const holeOffset = 30
-      const holes = 9 // Number of holes on each side
-      const holeSpacing = (stripCanvas.height - bottomBrandingHeight) / (holes - 1)
-      
-      ctx.fillStyle = "#333333" // Darker gray for hole shadows
-      for (let side = 0; side < 2; side++) {
-        const x = side === 0 ? borderWidth/2 : stripCanvas.width - borderWidth/2
-        for (let i = 0; i < holes; i++) {
-          const y = holeOffset + (i * holeSpacing)
-          ctx.beginPath()
-          ctx.arc(x, y, holeRadius + 2, 0, Math.PI * 2)
-          ctx.fill()
+      // If a frame is selected, draw it first
+      if (currentFrame) {
+        const frameImg = new Image()
+        if (!currentFrame.startsWith('data:')) {
+          frameImg.crossOrigin = "anonymous"
         }
-      }
-      
-      ctx.fillStyle = "#444444" // Lighter gray for holes
-      for (let side = 0; side < 2; side++) {
-        const x = side === 0 ? borderWidth/2 : stripCanvas.width - borderWidth/2
-        for (let i = 0; i < holes; i++) {
-          const y = holeOffset + (i * holeSpacing)
-          ctx.beginPath()
-          ctx.arc(x, y, holeRadius, 0, Math.PI * 2)
-          ctx.fill()
-        }
+        
+        await new Promise<void>((resolve) => {
+          frameImg.onload = () => {
+            try {
+              ctx.drawImage(frameImg, 0, 0, stripCanvas.width, stripCanvas.height)
+              resolve()
+            } catch (error) {
+              console.error("Error drawing frame:", error)
+              setDebugInfo(`Error drawing frame: ${error instanceof Error ? error.message : 'Unknown error'}`)
+              resolve()
+            }
+          }
+          
+          frameImg.onerror = () => {
+            console.error("Error loading frame:", currentFrame)
+            setDebugInfo(`Error loading frame: ${currentFrame}`)
+            resolve()
+          }
+          
+          frameImg.src = currentFrame
+        })
       }
 
       // Load and draw each image
@@ -542,8 +490,7 @@ export function PhotoBooth() {
           const img = new Image()
           img.crossOrigin = "anonymous"
           img.onload = async () => {
-            const y = padding + (i * (photoHeight + padding))
-            await drawPhotoWithFrame(ctx, img, borderWidth + padding, y, photoWidth, photoHeight)
+            await drawPhotoWithFrame(ctx, img, i)
             resolve()
           }
           
@@ -556,20 +503,23 @@ export function PhotoBooth() {
         })
       }
 
+      // Format date consistently
+      const now = new Date()
+      const formattedDate = now.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      })
+
       // Add branding at the bottom
-      const brandingY = stripCanvas.height - bottomBrandingHeight + 20
       ctx.fillStyle = "black"
-      ctx.fillRect(0, stripCanvas.height - bottomBrandingHeight, stripCanvas.width, bottomBrandingHeight)
-      
-      // Add logo/text
-      ctx.fillStyle = "white"
-      ctx.font = "bold 48px sans-serif"
+      ctx.font = "bold 72px sans-serif"
       ctx.textAlign = "center"
-      ctx.fillText("SNAPBOOTH", stripCanvas.width / 2, brandingY + 30)
+      ctx.fillText("SNAPBOOTH", stripCanvas.width / 2, 3320)
       
-      // Add date
-      ctx.font = "24px sans-serif"
-      ctx.fillText(new Date().toLocaleDateString(), stripCanvas.width / 2, brandingY + 70)
+      // Add date with consistent formatting
+      ctx.font = "36px sans-serif"
+      ctx.fillText(formattedDate, stripCanvas.width / 2, 3380)
 
       // Convert the completed strip to a data URL
       const dataUrl = stripCanvas.toDataURL("image/jpeg", 0.95)
@@ -735,8 +685,20 @@ export function PhotoBooth() {
         value={activeTab} 
         onValueChange={(value) => {
           setActiveTab(value)
-          // If switching to camera tab and we need to initialize
-          if (value === "camera" && setupComplete && !isCameraActive && !isCameraLoading) {
+          // Reset camera state when switching away from camera tab
+          if (value !== "camera") {
+            if (cameraStream) {
+              cameraStream.getTracks().forEach(track => track.stop())
+              setCameraStream(null)
+            }
+            if (videoRef.current) {
+              videoRef.current.srcObject = null
+            }
+            setIsCameraActive(false)
+          }
+          // Initialize camera when switching to camera tab
+          if (value === "camera" && setupComplete) {
+            setIsCameraLoading(true)
             // Small delay to ensure state updates have propagated
             setTimeout(() => {
               initializeCamera()

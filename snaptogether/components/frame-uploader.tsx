@@ -67,30 +67,41 @@ export function FrameUploader({ onFrameUpload }: FrameUploaderProps) {
   // Template SVG code to download - this is a simple frame template with guides
   const downloadTemplateFile = () => {
     const templateSVG = `
-    <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
-      <!-- Photo area (should be transparent) -->
-      <rect x="20" y="20" width="360" height="260" fill="none" stroke="#FF0000" strokeWidth="2" strokeDasharray="5,5" />
+    <svg width="1200" height="3600" xmlns="http://www.w3.org/2000/svg">
+      <!-- White background -->
+      <rect x="0" y="0" width="1200" height="3600" fill="white"/>
       
-      <!-- Frame border -->
-      <rect x="0" y="0" width="400" height="300" fill="none" stroke="#000000" strokeWidth="8" />
+      <!-- Photo frames -->
+      <!-- Frame 1 -->
+      <rect x="100" y="80" width="1000" height="700" fill="none" stroke="#FF0000" stroke-width="2" stroke-dasharray="5,5"/>
+      <text x="600" y="430" font-family="Arial" font-size="20" text-anchor="middle" fill="#888888">Photo Area 1 (keep transparent)</text>
+
+      <!-- Frame 2 -->
+      <rect x="100" y="840" width="1000" height="700" fill="none" stroke="#FF0000" stroke-width="2" stroke-dasharray="5,5"/>
+      <text x="600" y="1190" font-family="Arial" font-size="20" text-anchor="middle" fill="#888888">Photo Area 2 (keep transparent)</text>
+
+      <!-- Frame 3 -->
+      <rect x="100" y="1600" width="1000" height="700" fill="none" stroke="#FF0000" stroke-width="2" stroke-dasharray="5,5"/>
+      <text x="600" y="1950" font-family="Arial" font-size="20" text-anchor="middle" fill="#888888">Photo Area 3 (keep transparent)</text>
+
+      <!-- Frame 4 -->
+      <rect x="100" y="2360" width="1000" height="700" fill="none" stroke="#FF0000" stroke-width="2" stroke-dasharray="5,5"/>
+      <text x="600" y="2710" font-family="Arial" font-size="20" text-anchor="middle" fill="#888888">Photo Area 4 (keep transparent)</text>
+
+      <!-- Bottom branding area - enlarged -->
+      <rect x="100" y="3120" width="1000" height="400" fill="none" stroke="#FF0000" stroke-width="2" stroke-dasharray="5,5"/>
+      <text x="600" y="3320" font-family="Arial" font-size="20" text-anchor="middle" fill="#888888">Branding Area (customize)</text>
       
-      <!-- Corner decorations - modify these for your frame design -->
-      <path d="M 0,0 L 40,0 L 40,40 L 0,40 Z" fill="#000000" opacity="0.5" />
-      <path d="M 360,0 L 400,0 L 400,40 L 360,40 Z" fill="#000000" opacity="0.5" />
-      <path d="M 0,260 L 40,260 L 40,300 L 0,300 Z" fill="#000000" opacity="0.5" />
-      <path d="M 360,260 L 400,260 L 400,300 L 360,300 Z" fill="#000000" opacity="0.5" />
-      
-      <!-- Guide text -->
-      <text x="200" y="150" fontFamily="Arial" fontSize="12" textAnchor="middle" fill="#888888">Photo Area (keep transparent)</text>
-      <text x="200" y="280" fontFamily="Arial" fontSize="10" textAnchor="middle" fill="#000000">Frame Template - 400×300px</text>
-    </svg>
-    `
+      <!-- Template guides -->
+      <text x="600" y="3550" font-family="Arial" font-size="16" text-anchor="middle" fill="#666666">Frame Template - 1200×3600px</text>
+      <text x="600" y="3580" font-family="Arial" font-size="14" text-anchor="middle" fill="#666666">Keep photo areas transparent when designing your frame</text>
+    </svg>`
 
     const blob = new Blob([templateSVG], { type: "image/svg+xml" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = "frame-template.svg"
+    link.download = "photostrip-template.svg"
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -129,19 +140,21 @@ export function FrameUploader({ onFrameUpload }: FrameUploaderProps) {
             </div>
           ) : (
             <div className="relative border rounded-lg overflow-hidden">
-              <img
-                src={previewUrl || "/placeholder.svg"}
-                alt="Frame preview"
-                className="w-full h-auto object-contain max-h-40"
-              />
-              <Button
-                variant="destructive"
-                size="icon"
-                className="absolute top-2 right-2 h-6 w-6 rounded-full"
-                onClick={clearPreview}
-              >
-                <X className="h-3 w-3" />
-              </Button>
+              <div className="aspect-[2/5] w-full relative">
+                <img
+                  src={previewUrl || "/placeholder.svg"}
+                  alt="Frame preview"
+                  className="absolute inset-0 w-full h-full object-contain"
+                />
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="absolute top-2 right-2 h-6 w-6 rounded-full"
+                  onClick={clearPreview}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
           )}
         </TabsContent>
