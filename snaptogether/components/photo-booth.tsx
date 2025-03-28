@@ -831,27 +831,36 @@ export function PhotoBooth() {
 
               <div className="relative overflow-hidden rounded-lg bg-black md:aspect-[4/3]">
                 {/* Aspect ratio container for mobile only */}
-                <div className="md:hidden relative w-full h-full" style={{ paddingBottom: "133.33%" }}>  {/* 3:4 aspect ratio on mobile */}
-                  <div className="absolute inset-0 w-full h-full">
+                <div className="md:hidden relative w-full" style={{ 
+                  paddingBottom: "133.33%",
+                  minHeight: "300px",
+                  height: "100vh",
+                  maxHeight: "80vh"
+                }}>
+                  <div className="absolute inset-0 flex items-center justify-center bg-black">
+                    {/* Debug overlay - always visible in top-left corner */}
+                    <div className="absolute top-0 left-0 z-30 p-2 bg-black/50 text-white text-xs">
+                      <div>Container: {videoRef.current?.parentElement?.offsetWidth}x{videoRef.current?.parentElement?.offsetHeight}</div>
+                      <div>Video: {videoRef.current?.offsetWidth}x{videoRef.current?.offsetHeight}</div>
+                      <div>Canvas: {canvasRef.current?.offsetWidth}x{canvasRef.current?.offsetHeight}</div>
+                    </div>
+
                     {isCapturing && countdown !== null && countdown > 0 && (
-                      <div
-                        className="absolute inset-0 flex items-center justify-center z-10"
-                        style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-                      >
+                      <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/50">
                         <div className="text-white text-7xl font-bold">{countdown}</div>
                       </div>
                     )}
 
                     {/* Camera loading state */}
                     {isCameraLoading && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
                         <div className="text-white">Loading camera...</div>
                       </div>
                     )}
 
                     {/* Camera not started state */}
                     {!isCameraActive && !isCameraLoading && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10">
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
                         <Camera className="h-12 w-12 text-white mb-4" />
                         <p className="text-white mb-4">Camera access is required</p>
                         <Button onClick={initializeCamera} className="gap-2">
@@ -867,13 +876,23 @@ export function PhotoBooth() {
                         autoPlay 
                         playsInline 
                         muted 
-                        className="absolute inset-0 w-full h-full object-cover" 
-                        style={{ minWidth: '100%', minHeight: '100%' }}
+                        className="absolute inset-0 w-full h-full object-cover"
+                        style={{ 
+                          minWidth: '100%', 
+                          minHeight: '100%',
+                          width: '100%',
+                          height: '100%'
+                        }}
                       />
                       <canvas 
                         ref={canvasRef} 
-                        className="absolute inset-0 w-full h-full" 
-                        style={{ minWidth: '100%', minHeight: '100%' }}
+                        className="absolute inset-0 w-full h-full"
+                        style={{ 
+                          minWidth: '100%', 
+                          minHeight: '100%',
+                          width: '100%',
+                          height: '100%'
+                        }}
                       />
                     </div>
 
@@ -981,9 +1000,18 @@ export function PhotoBooth() {
               {/* Debug information */}
               {debugInfo && (
                 <div className="mt-4 p-2 border border-dashed rounded text-xs text-muted-foreground">
-                  <details>
-                    <summary className="cursor-pointer">Debug Info</summary>
-                    <pre className="mt-2 whitespace-pre-wrap">{debugInfo}</pre>
+                  <details open>
+                    <summary className="cursor-pointer font-bold">Debug Info</summary>
+                    <div className="mt-2 space-y-1">
+                      <div><strong>Video Stream:</strong> {videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}</div>
+                      <div><strong>Video Element:</strong> {videoRef.current?.offsetWidth}x{videoRef.current?.offsetHeight}</div>
+                      <div><strong>Canvas Element:</strong> {canvasRef.current?.offsetWidth}x{canvasRef.current?.offsetHeight}</div>
+                      <div><strong>Container:</strong> {videoRef.current?.parentElement?.offsetWidth}x{videoRef.current?.parentElement?.offsetHeight}</div>
+                      <div><strong>Ready State:</strong> {videoRef.current?.readyState}</div>
+                      <div><strong>Playing:</strong> {!videoRef.current?.paused}</div>
+                      <div><strong>Error:</strong> {videoRef.current?.error?.message || 'none'}</div>
+                      <pre className="mt-2 whitespace-pre-wrap text-xs opacity-75">{debugInfo}</pre>
+                    </div>
                   </details>
                 </div>
               )}
