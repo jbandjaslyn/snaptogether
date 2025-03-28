@@ -85,18 +85,41 @@ export function PhotoBooth() {
       if (canvas && video && video.readyState >= 2 && !video.paused) {
         const context = canvas.getContext("2d")
         if (context) {
+          // Log video and canvas dimensions
+          setDebugInfo(`Video dimensions: ${video.videoWidth}x${video.videoHeight}, ` +
+            `Canvas dimensions: ${canvas.width}x${canvas.height}, ` +
+            `Video ready state: ${video.readyState}, ` +
+            `Video paused: ${video.paused}, ` +
+            `Video element dimensions: ${video.offsetWidth}x${video.offsetHeight}, ` +
+            `Canvas element dimensions: ${canvas.offsetWidth}x${canvas.offsetHeight}, ` +
+            `Video playing: ${!video.paused}, ` +
+            `Video current time: ${video.currentTime}, ` +
+            `Video error: ${video.error?.message || 'none'}, ` +
+            `User Agent: ${navigator.userAgent}`)
+
           // Set canvas dimensions to match video
           canvas.width = video.videoWidth || 640
           canvas.height = video.videoHeight || 480
           // Draw the video frame
-          context.drawImage(video, 0, 0, canvas.width, canvas.height)
-          // Apply the filter
-          applyFilter(context, currentFilter, canvas.width, canvas.height)
+          try {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height)
+            // Apply the filter
+            applyFilter(context, currentFilter, canvas.width, canvas.height)
+          } catch (err) {
+            setDebugInfo(`Draw error: ${err instanceof Error ? err.message : String(err)}`)
+          }
         }
+      } else {
+        setDebugInfo(`Canvas/Video state: ` +
+          `Canvas exists: ${!!canvas}, ` +
+          `Video exists: ${!!video}, ` +
+          `Video ready state: ${video?.readyState}, ` +
+          `Video paused: ${video?.paused}, ` +
+          `Video dimensions: ${video?.videoWidth}x${video?.videoHeight}`)
       }
     }
 
-    const intervalId = setInterval(updateCanvas, 100) // Update 10 times per second
+    const intervalId = setInterval(updateCanvas, 1000) // Update every second for debugging
 
     return () => clearInterval(intervalId)
   }, [currentFilter, isCameraActive, setupComplete])
@@ -138,6 +161,17 @@ export function PhotoBooth() {
       }
       setIsCameraActive(false)
 
+      // Log available devices
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const videoDevices = devices.filter(device => device.kind === 'videoinput')
+        setDebugInfo(`Available video devices: ${videoDevices.length}\n${
+          videoDevices.map(d => `${d.label || 'Unnamed device'} (${d.deviceId})`).join('\n')
+        }`)
+      } catch (err) {
+        setDebugInfo(`Error enumerating devices: ${err instanceof Error ? err.message : String(err)}`)
+      }
+
       // Request camera access
       const constraints = {
         video: {
@@ -152,21 +186,28 @@ export function PhotoBooth() {
       setDebugInfo("Requesting camera access...")
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
       
+      // Log stream information
+      const videoTrack = stream.getVideoTracks()[0]
+      const settings = videoTrack.getSettings()
+      setDebugInfo(`Camera access granted:\nTrack settings: ${JSON.stringify(settings, null, 2)}`)
+      
       setCameraStream(stream)
-      setDebugInfo("Camera access granted, setting up video element...")
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream
+        videoRef.current.onloadedmetadata = () => {
+          setDebugInfo(`Video metadata loaded:\nDimensions: ${videoRef.current?.videoWidth}x${videoRef.current?.videoHeight}\nReady State: ${videoRef.current?.readyState}`)
+        }
 
         // Wait for video to be ready
         await new Promise<void>((resolve, reject) => {
           if (!videoRef.current) return reject("Video element not found")
 
           const onLoadedMetadata = () => {
-            setDebugInfo("Video metadata loaded")
+            setDebugInfo(`Video metadata loaded and ready to play`)
             videoRef.current?.removeEventListener('loadedmetadata', onLoadedMetadata)
             videoRef.current?.play().then(() => {
-              setDebugInfo("Video playback started after metadata load")
+              setDebugInfo(`Video playback started successfully`)
               resolve()
             }).catch((err) => {
               setDebugInfo(`Failed to start video playback: ${err.message}`)
