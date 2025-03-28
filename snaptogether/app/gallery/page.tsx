@@ -28,7 +28,7 @@ export default function GalleryPage() {
         <div className="container flex items-center justify-between h-16 px-4 mx-auto md:px-6">
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <Camera className="w-6 h-6" />
-            <span>SnapBooth</span>
+            <span>SnapTogether</span>
           </Link>
           <nav className="flex items-center gap-4">
             <Link href="/">

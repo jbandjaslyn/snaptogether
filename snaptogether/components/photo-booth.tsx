@@ -831,8 +831,8 @@ export function PhotoBooth() {
 
               <div className="relative overflow-hidden rounded-lg bg-black md:aspect-[4/3]">
                 {/* Aspect ratio container for mobile only */}
-                <div className="md:hidden relative w-full" style={{ paddingBottom: "75%" }}>  {/* 4:3 aspect ratio on mobile */}
-                  <div className="absolute inset-0">
+                <div className="md:hidden relative w-full h-full" style={{ paddingBottom: "133.33%" }}>  {/* 3:4 aspect ratio on mobile */}
+                  <div className="absolute inset-0 w-full h-full">
                     {isCapturing && countdown !== null && countdown > 0 && (
                       <div
                         className="absolute inset-0 flex items-center justify-center z-10"
@@ -861,20 +861,24 @@ export function PhotoBooth() {
                       </div>
                     )}
 
-                    <video 
-                      ref={videoRef} 
-                      autoPlay 
-                      playsInline 
-                      muted 
-                      className="absolute inset-0 w-full h-full object-cover" 
-                    />
-                    <canvas 
-                      ref={canvasRef} 
-                      className="absolute inset-0 w-full h-full" 
-                    />
+                    <div className="absolute inset-0 w-full h-full">
+                      <video 
+                        ref={videoRef} 
+                        autoPlay 
+                        playsInline 
+                        muted 
+                        className="absolute inset-0 w-full h-full object-cover" 
+                        style={{ minWidth: '100%', minHeight: '100%' }}
+                      />
+                      <canvas 
+                        ref={canvasRef} 
+                        className="absolute inset-0 w-full h-full" 
+                        style={{ minWidth: '100%', minHeight: '100%' }}
+                      />
+                    </div>
 
                     {isCapturing && countdown === 0 && (
-                      <div className="absolute bottom-0 left-0 right-0 p-4">
+                      <div className="absolute bottom-0 left-0 right-0 p-4 z-20">
                         <Progress value={(capturedImages.length / 4) * 100} className="h-2" />
                         <p className="text-white text-center mt-2">Taking photo {capturedImages.length + 1} of 4</p>
                       </div>

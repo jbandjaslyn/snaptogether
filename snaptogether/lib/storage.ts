@@ -1,5 +1,5 @@
 // Storage utility for managing photos
-const STORAGE_KEY = 'snapbooth_photos'
+const STORAGE_KEY = 'snaptogether_photos'
 
 export interface SavedPhoto {
   id: string

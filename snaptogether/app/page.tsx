@@ -11,7 +11,7 @@ export default function Home() {
         <div className="container flex items-center justify-between h-16 px-4 mx-auto md:px-6">
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <Camera className="w-6 h-6" />
-            <span>SnapBooth</span>
+            <span>SnapTogether</span>
           </Link>
           <nav className="flex items-center gap-4">
             <Link href="/gallery">
@@ -37,7 +37,7 @@ export default function Home() {
       <footer className="border-t">
         <div className="container flex flex-col items-center justify-between gap-4 py-6 md:h-16 md:flex-row md:py-0">
           <div className="text-sm text-center text-gray-500 dark:text-gray-400">
-            © {new Date().getFullYear()} SnapBooth. All rights reserved.
+            © {new Date().getFullYear()} SnapTogether. All rights reserved.
           </div>
           <div className="flex items-center gap-4">
             <Link href="#" className="text-sm underline">
