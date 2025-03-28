@@ -516,7 +516,7 @@ export function PhotoBooth() {
       ctx.fillStyle = "black"
       ctx.font = "bold 72px sans-serif"
       ctx.textAlign = "center"
-      ctx.fillText("SNAPBOOTH", stripCanvas.width / 2, 3320)
+      ctx.fillText("SnapTogether", stripCanvas.width / 2, 3320)
       
       // Add date with consistent formatting
       ctx.font = "36px sans-serif"
@@ -632,7 +632,7 @@ export function PhotoBooth() {
     if (stripImage) {
       const link = document.createElement("a")
       link.href = stripImage
-      link.download = `snapbooth-strip-${Date.now()}.jpg`
+      link.download = `snaptogether-strip-${Date.now()}.jpg`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -790,53 +790,55 @@ export function PhotoBooth() {
 
               <div className="relative overflow-hidden rounded-lg bg-black md:aspect-[4/3]">
                 {/* Aspect ratio container for mobile only */}
-                <div className="md:hidden pb-[133.33%] relative">  {/* 4:3 aspect ratio on mobile */}
-                  {isCapturing && countdown !== null && countdown > 0 && (
-                    <div
-                      className="absolute inset-0 flex items-center justify-center z-10"
-                      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-                    >
-                      <div className="text-white text-7xl font-bold">{countdown}</div>
-                    </div>
-                  )}
+                <div className="md:hidden relative w-full" style={{ paddingBottom: "75%" }}>  {/* 4:3 aspect ratio on mobile */}
+                  <div className="absolute inset-0">
+                    {isCapturing && countdown !== null && countdown > 0 && (
+                      <div
+                        className="absolute inset-0 flex items-center justify-center z-10"
+                        style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+                      >
+                        <div className="text-white text-7xl font-bold">{countdown}</div>
+                      </div>
+                    )}
 
-                  {/* Camera loading state */}
-                  {isCameraLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-                      <div className="text-white">Loading camera...</div>
-                    </div>
-                  )}
+                    {/* Camera loading state */}
+                    {isCameraLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                        <div className="text-white">Loading camera...</div>
+                      </div>
+                    )}
 
-                  {/* Camera not started state */}
-                  {!isCameraActive && !isCameraLoading && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10">
-                      <Camera className="h-12 w-12 text-white mb-4" />
-                      <p className="text-white mb-4">Camera access is required</p>
-                      <Button onClick={initializeCamera} className="gap-2">
-                        <Play className="h-4 w-4" />
-                        Start Camera
-                      </Button>
-                    </div>
-                  )}
+                    {/* Camera not started state */}
+                    {!isCameraActive && !isCameraLoading && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10">
+                        <Camera className="h-12 w-12 text-white mb-4" />
+                        <p className="text-white mb-4">Camera access is required</p>
+                        <Button onClick={initializeCamera} className="gap-2">
+                          <Play className="h-4 w-4" />
+                          Start Camera
+                        </Button>
+                      </div>
+                    )}
 
-                  <video 
-                    ref={videoRef} 
-                    autoPlay 
-                    playsInline 
-                    muted 
-                    className="absolute inset-0 w-full h-full object-cover" 
-                  />
-                  <canvas 
-                    ref={canvasRef} 
-                    className="absolute inset-0 w-full h-full" 
-                  />
+                    <video 
+                      ref={videoRef} 
+                      autoPlay 
+                      playsInline 
+                      muted 
+                      className="absolute inset-0 w-full h-full object-cover" 
+                    />
+                    <canvas 
+                      ref={canvasRef} 
+                      className="absolute inset-0 w-full h-full" 
+                    />
 
-                  {isCapturing && countdown === 0 && (
-                    <div className="absolute bottom-0 left-0 right-0 p-4">
-                      <Progress value={(capturedImages.length / 4) * 100} className="h-2" />
-                      <p className="text-white text-center mt-2">Taking photo {capturedImages.length + 1} of 4</p>
-                    </div>
-                  )}
+                    {isCapturing && countdown === 0 && (
+                      <div className="absolute bottom-0 left-0 right-0 p-4">
+                        <Progress value={(capturedImages.length / 4) * 100} className="h-2" />
+                        <p className="text-white text-center mt-2">Taking photo {capturedImages.length + 1} of 4</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Desktop content */}
