@@ -43,21 +43,110 @@ export function FrameUploader({ onFrameUpload }: FrameUploaderProps) {
   }
 
   const processFile = (file: File) => {
-    // Check if file is an image
-    if (!file.type.match("image.*")) {
-      alert("Please upload an image file")
+    // Check if file is an acceptable image type
+    if (!file.type.match(/^image\/(png|svg\+xml)$/)) {
+      alert("Please upload a PNG or SVG file")
+      return
+    }
+
+    // Check file size (max 20MB)
+    if (file.size > 20 * 1024 * 1024) {
+      alert("File size should be less than 20MB")
       return
     }
 
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       if (e.target?.result) {
         const frameUrl = e.target.result as string
-        setPreviewUrl(frameUrl)
-        onFrameUpload(frameUrl)
+        
+        // For PNG files, verify dimensions and transparency
+        if (file.type === 'image/png') {
+          const img = new Image()
+          img.onload = async () => {
+            // Check dimensions
+            if (img.width !== 1200 || img.height !== 3600) {
+              alert("PNG frame must be 1200x3600 pixels. Please use the template as a guide.")
+              return
+            }
+            
+            try {
+              // Compress PNG before storing
+              const canvas = document.createElement('canvas')
+              canvas.width = img.width
+              canvas.height = img.height
+              const ctx = canvas.getContext('2d')
+              if (!ctx) {
+                throw new Error('Could not get canvas context')
+              }
+              
+              // Draw and compress
+              ctx.drawImage(img, 0, 0)
+              const compressedUrl = canvas.toDataURL('image/png', 0.7) // Compress with 0.7 quality
+              
+              // Check estimated storage size
+              const totalSize = estimateStorageSize(compressedUrl)
+              if (totalSize > 4.5 * 1024 * 1024) { // Warning at 4.5MB
+                if (!confirm("This frame is quite large and may cause storage issues. Continue anyway?")) {
+                  return
+                }
+              }
+
+              // Store frame type along with the URL
+              const frameData = {
+                url: compressedUrl,
+                type: 'png'
+              }
+              setPreviewUrl(compressedUrl)
+              onFrameUpload(JSON.stringify(frameData))
+            } catch (error) {
+              if (error instanceof Error && error.name === 'QuotaExceededError') {
+                alert("Storage limit reached. Please delete some existing frames first.")
+              } else {
+                alert("Error processing image. Please try a smaller file.")
+                console.error("Frame processing error:", error)
+              }
+            }
+          }
+          img.src = frameUrl
+        } else {
+          // For SVG files, store with type
+          try {
+            // Check estimated storage size
+            const totalSize = estimateStorageSize(frameUrl)
+            if (totalSize > 4.5 * 1024 * 1024) { // Warning at 4.5MB
+              if (!confirm("This frame is quite large and may cause storage issues. Continue anyway?")) {
+                return
+              }
+            }
+
+            const frameData = {
+              url: frameUrl,
+              type: 'svg'
+            }
+            setPreviewUrl(frameUrl)
+            onFrameUpload(JSON.stringify(frameData))
+          } catch (error) {
+            if (error instanceof Error && error.name === 'QuotaExceededError') {
+              alert("Storage limit reached. Please delete some existing frames first.")
+            } else {
+              alert("Error processing image. Please try a smaller file.")
+              console.error("Frame processing error:", error)
+            }
+          }
+        }
       }
     }
     reader.readAsDataURL(file)
+  }
+
+  // Helper function to estimate storage size
+  const estimateStorageSize = (dataUrl: string): number => {
+    // Get current frames from localStorage
+    const currentFrames = localStorage.getItem('customFrames')
+    const currentSize = currentFrames ? new Blob([currentFrames]).size : 0
+    const newItemSize = new Blob([dataUrl]).size
+    return currentSize + newItemSize
   }
 
   const clearPreview = () => {
@@ -111,6 +200,13 @@ export function FrameUploader({ onFrameUpload }: FrameUploaderProps) {
   return (
     <div className="w-full space-y-4">
       <h3 className="text-sm font-medium">Upload Your Own Frame</h3>
+      <div className="text-xs text-muted-foreground mb-2">
+        Accepted formats:
+        <ul className="list-disc pl-5 mt-1">
+          <li>PNG (1200x3600px, with transparency)</li>
+          <li>SVG (with transparent photo areas)</li>
+        </ul>
+      </div>
 
       <Tabs
         defaultValue="file"

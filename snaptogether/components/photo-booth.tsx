@@ -42,34 +42,85 @@ export function PhotoBooth() {
 
   // Load custom frames from localStorage on component mount
   useEffect(() => {
-    const savedFrames = localStorage.getItem("customFrames")
-    if (savedFrames) {
-      try {
+    try {
+      const savedFrames = localStorage.getItem("customFrames")
+      if (savedFrames) {
         const frames = JSON.parse(savedFrames)
         setCustomFrames(frames)
 
         // If we have previously saved frames, check if one was selected
         const savedSelectedFrame = localStorage.getItem("selectedFrame")
         if (savedSelectedFrame) {
-          setCurrentFrame(savedSelectedFrame)
-          setFrameSelected(true)
+          // Check if the saved frame still exists
+          const frameExists = frames.some((frameStr: string) => {
+            try {
+              const frameData = JSON.parse(frameStr)
+              return frameData.url === savedSelectedFrame
+            } catch {
+              return frameStr === savedSelectedFrame
+            }
+          }) || TEMPLATE_FRAMES.some(frame => frame.url === savedSelectedFrame)
+
+          if (frameExists) {
+            setCurrentFrame(savedSelectedFrame)
+            setFrameSelected(true)
+          } else {
+            // Clear invalid selection
+            localStorage.removeItem("selectedFrame")
+          }
         }
-      } catch (e) {
-        console.error("Error loading saved frames:", e)
-        setDebugInfo(`Error loading saved frames: ${e instanceof Error ? e.message : String(e)}`)
       }
+    } catch (e) {
+      console.error("Error loading saved frames:", e)
+      setDebugInfo(`Error loading saved frames: ${e instanceof Error ? e.message : String(e)}`)
     }
   }, [])
 
   // Save custom frames to localStorage when they change
   useEffect(() => {
     if (customFrames.length > 0) {
-      localStorage.setItem("customFrames", JSON.stringify(customFrames))
+      try {
+        localStorage.setItem("customFrames", JSON.stringify(customFrames))
+      } catch (error) {
+        if (error instanceof Error && error.name === 'QuotaExceededError') {
+          // Remove the last added frame since it couldn't be saved
+          setCustomFrames(prev => prev.slice(0, -1))
+          alert("Storage limit reached. Please delete some existing frames first.")
+        } else {
+          console.error("Error saving frames:", error)
+        }
+      }
+    } else {
+      // Clear storage if no custom frames
+      localStorage.removeItem("customFrames")
     }
 
-    // Save the selected frame to localStorage
+    // Save the selected frame reference
     if (currentFrame) {
-      localStorage.setItem("selectedFrame", currentFrame)
+      try {
+        // For custom frames, store just the index
+        const customFrameIndex = customFrames.findIndex(frameStr => {
+          try {
+            const frameData = JSON.parse(frameStr)
+            return frameData.url === currentFrame
+          } catch {
+            return frameStr === currentFrame
+          }
+        })
+
+        if (customFrameIndex !== -1) {
+          localStorage.setItem("selectedFrame", `custom:${customFrameIndex}`)
+        } else {
+          // For template frames, store the template ID
+          const templateFrame = TEMPLATE_FRAMES.find(frame => frame.url === currentFrame)
+          if (templateFrame) {
+            localStorage.setItem("selectedFrame", `template:${templateFrame.id}`)
+          }
+        }
+      } catch (error) {
+        // If storage fails, we can continue without saving the selection
+        console.error("Error saving frame selection:", error)
+      }
     } else {
       localStorage.removeItem("selectedFrame")
     }
@@ -270,10 +321,29 @@ export function PhotoBooth() {
   }
 
   // Handle frame upload
-  const handleFrameUpload = (frameUrl: string) => {
-    setCustomFrames((prev) => [...prev, frameUrl])
-    setCurrentFrame(frameUrl)
-    setFrameSelected(true)
+  const handleFrameUpload = (frameDataStr: string) => {
+    try {
+      // Test if we can store the new frame
+      const testStorage = [...customFrames, frameDataStr]
+      // Try to store it - if this doesn't throw, we have enough space
+      localStorage.setItem("customFrames", JSON.stringify(testStorage))
+      localStorage.removeItem("customFrames") // Clean up test
+      
+      // Actually store it through state update
+      setCustomFrames(testStorage)
+      
+      // Parse the frame data to get the URL
+      const frameData = JSON.parse(frameDataStr)
+      setCurrentFrame(frameData.url)
+      setFrameSelected(true)
+    } catch (error) {
+      if (error instanceof Error && error.name === 'QuotaExceededError') {
+        alert("Storage limit reached. Please delete some existing frames first.")
+      } else {
+        console.error("Error handling frame upload:", error)
+        alert("Error uploading frame. Please try again.")
+      }
+    }
   }
 
   // Handle frame selection
@@ -512,6 +582,7 @@ export function PhotoBooth() {
       // If a frame is selected, draw it first
       if (currentFrame) {
         const frameImg = new Image()
+        // Check if the frame is a data URL or needs CORS handling
         if (!currentFrame.startsWith('data:')) {
           frameImg.crossOrigin = "anonymous"
         }
@@ -519,7 +590,34 @@ export function PhotoBooth() {
         await new Promise<void>((resolve) => {
           frameImg.onload = () => {
             try {
-              ctx.drawImage(frameImg, 0, 0, stripCanvas.width, stripCanvas.height)
+              // For PNG frames, we need to handle the aspect ratio differently
+              const isPNG = customFrames.some(frameStr => {
+                try {
+                  const frameData = JSON.parse(frameStr);
+                  return frameData.url === currentFrame && frameData.type === 'png';
+                } catch {
+                  return false;
+                }
+              });
+
+              if (isPNG) {
+                // Draw PNG frame maintaining aspect ratio
+                const scale = Math.min(
+                  stripCanvas.width / frameImg.width,
+                  stripCanvas.height / frameImg.height
+                );
+                const x = (stripCanvas.width - frameImg.width * scale) / 2;
+                const y = (stripCanvas.height - frameImg.height * scale) / 2;
+                ctx.drawImage(
+                  frameImg,
+                  x, y,
+                  frameImg.width * scale,
+                  frameImg.height * scale
+                );
+              } else {
+                // Draw SVG frame normally
+                ctx.drawImage(frameImg, 0, 0, stripCanvas.width, stripCanvas.height);
+              }
               resolve()
             } catch (error) {
               console.error("Error drawing frame:", error)
@@ -797,6 +895,12 @@ export function PhotoBooth() {
                 currentFrame={currentFrame}
                 customFrames={customFrames}
                 onFrameChange={handleFrameChange}
+                onDeleteCustomFrame={(index) => {
+                  const newCustomFrames = [...customFrames];
+                  newCustomFrames.splice(index, 1);
+                  setCustomFrames(newCustomFrames);
+                  localStorage.setItem("customFrames", JSON.stringify(newCustomFrames));
+                }}
               />
 
               <div className="border-t pt-6">
