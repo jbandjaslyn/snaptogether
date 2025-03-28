@@ -141,8 +141,9 @@ export function PhotoBooth() {
       // Request camera access
       const constraints = {
         video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 960, max: 1440 },
+          aspectRatio: { min: 0.75, max: 1.333333 },  // Allow ratios between 3:4 and 4:3
           facingMode: "user",
         },
         audio: false,
@@ -787,44 +788,106 @@ export function PhotoBooth() {
                 </p>
               </div>
 
-              <div className="relative overflow-hidden rounded-lg bg-black aspect-video">
-                {isCapturing && countdown !== null && countdown > 0 && (
-                  <div
-                    className="absolute inset-0 flex items-center justify-center z-10"
-                    style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-                  >
-                    <div className="text-white text-7xl font-bold">{countdown}</div>
-                  </div>
-                )}
+              <div className="relative overflow-hidden rounded-lg bg-black md:aspect-[4/3]">
+                {/* Aspect ratio container for mobile only */}
+                <div className="md:hidden pb-[133.33%] relative">  {/* 4:3 aspect ratio on mobile */}
+                  {isCapturing && countdown !== null && countdown > 0 && (
+                    <div
+                      className="absolute inset-0 flex items-center justify-center z-10"
+                      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+                    >
+                      <div className="text-white text-7xl font-bold">{countdown}</div>
+                    </div>
+                  )}
 
-                {/* Camera loading state */}
-                {isCameraLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-                    <div className="text-white">Loading camera...</div>
-                  </div>
-                )}
+                  {/* Camera loading state */}
+                  {isCameraLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                      <div className="text-white">Loading camera...</div>
+                    </div>
+                  )}
 
-                {/* Camera not started state */}
-                {!isCameraActive && !isCameraLoading && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10">
-                    <Camera className="h-12 w-12 text-white mb-4" />
-                    <p className="text-white mb-4">Camera access is required</p>
-                    <Button onClick={initializeCamera} className="gap-2">
-                      <Play className="h-4 w-4" />
-                      Start Camera
-                    </Button>
-                  </div>
-                )}
+                  {/* Camera not started state */}
+                  {!isCameraActive && !isCameraLoading && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10">
+                      <Camera className="h-12 w-12 text-white mb-4" />
+                      <p className="text-white mb-4">Camera access is required</p>
+                      <Button onClick={initializeCamera} className="gap-2">
+                        <Play className="h-4 w-4" />
+                        Start Camera
+                      </Button>
+                    </div>
+                  )}
 
-                <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
-                <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full" />
+                  <video 
+                    ref={videoRef} 
+                    autoPlay 
+                    playsInline 
+                    muted 
+                    className="absolute inset-0 w-full h-full object-cover" 
+                  />
+                  <canvas 
+                    ref={canvasRef} 
+                    className="absolute inset-0 w-full h-full" 
+                  />
 
-                {isCapturing && countdown === 0 && (
-                  <div className="absolute bottom-0 left-0 right-0 p-4">
-                    <Progress value={(capturedImages.length / 4) * 100} className="h-2" />
-                    <p className="text-white text-center mt-2">Taking photo {capturedImages.length + 1} of 4</p>
-                  </div>
-                )}
+                  {isCapturing && countdown === 0 && (
+                    <div className="absolute bottom-0 left-0 right-0 p-4">
+                      <Progress value={(capturedImages.length / 4) * 100} className="h-2" />
+                      <p className="text-white text-center mt-2">Taking photo {capturedImages.length + 1} of 4</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Desktop content */}
+                <div className="hidden md:block relative">
+                  {isCapturing && countdown !== null && countdown > 0 && (
+                    <div
+                      className="absolute inset-0 flex items-center justify-center z-10"
+                      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+                    >
+                      <div className="text-white text-7xl font-bold">{countdown}</div>
+                    </div>
+                  )}
+
+                  {/* Camera loading state */}
+                  {isCameraLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                      <div className="text-white">Loading camera...</div>
+                    </div>
+                  )}
+
+                  {/* Camera not started state */}
+                  {!isCameraActive && !isCameraLoading && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10">
+                      <Camera className="h-12 w-12 text-white mb-4" />
+                      <p className="text-white mb-4">Camera access is required</p>
+                      <Button onClick={initializeCamera} className="gap-2">
+                        <Play className="h-4 w-4" />
+                        Start Camera
+                      </Button>
+                    </div>
+                  )}
+
+                  <video 
+                    ref={videoRef} 
+                    autoPlay 
+                    playsInline 
+                    muted 
+                    className="w-full h-full object-cover" 
+                  />
+                  <canvas 
+                    ref={canvasRef} 
+                    className="absolute inset-0 w-full h-full" 
+                  />
+
+                  {isCapturing && countdown === 0 && (
+                    <div className="absolute bottom-0 left-0 right-0 p-4">
+                      <Progress value={(capturedImages.length / 4) * 100} className="h-2" />
+                      <p className="text-white text-center mt-2">Taking photo {capturedImages.length + 1} of 4</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {cameraError && (
