@@ -685,6 +685,13 @@ export function PhotoBooth() {
         value={activeTab} 
         onValueChange={(value) => {
           setActiveTab(value)
+          // Reset states when switching to frames tab
+          if (value === "frames") {
+            setStripImage(null)
+            setCapturedImages([])
+            setIsCapturing(false)
+            setCountdown(null)
+          }
           // Reset camera state when switching away from camera tab
           if (value !== "camera") {
             if (cameraStream) {
